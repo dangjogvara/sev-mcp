@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="Sev.Api/Sev.Api.csproj" />
+  <Project Path="Sev.Client/Sev.Client.csproj" />
+  <Project Path="Sev.Mcp/Sev.Mcp.csproj" />
+</Solution>
