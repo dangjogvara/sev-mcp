@@ -21,6 +21,7 @@ var rows = customers
         .SelectMany(i => i.Meters, (i, m) => new { m.MeterId, m.MeterName, i.Address });
 
 foreach (var r in rows)
+
 {
     Console.WriteLine($"{r.MeterId} {r.MeterName} {r.Address}");
 }
