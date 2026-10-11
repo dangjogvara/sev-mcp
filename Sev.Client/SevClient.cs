@@ -7,7 +7,7 @@ namespace Sev.Client;
 
 public class SevClient(HttpClient http)
 {
-    private static readonly JsonSerializerOptions Json = new()
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
@@ -17,7 +17,7 @@ public class SevClient(HttpClient http)
         var response = await http.PostAsJsonAsync(
             "login_and_get_jwt_token",
             new { UserName = userName, Password = apiKey },
-            Json
+            JsonOptions
         );
         response.EnsureSuccessStatusCode();
 
@@ -30,11 +30,26 @@ public class SevClient(HttpClient http)
         var response = await http.PostAsync("get_available_meters", null);
         response.EnsureSuccessStatusCode();
 
-        var customers = await response.Content.ReadFromJsonAsync<List<Customer>>(Json);
+        var customers = await response.Content.ReadFromJsonAsync<List<Customer>>(JsonOptions);
         return customers ?? [];
 
     }
+
+    public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to)
+    {
+        var request = new HourlyUsageRequest(meterIds, from, to);
+
+        var response = await http.PostAsJsonAsync("hourly_kwh_usage", request, JsonOptions);
+
+        response.EnsureSuccessStatusCode();
+
+        var usage = await response.Content.ReadFromJsonAsync<List<MeterUsage>>(JsonOptions);
+
+        return usage ?? [];
+    }
 }
+
+
 
 
 
