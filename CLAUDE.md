@@ -11,6 +11,8 @@ A .NET 10 client for SEV's (Faroese electricity utility) customer REST API, inte
 ```bash
 dotnet build                                   # build the whole solution (SevMcp.slnx)
 set -a; source .env; set +a; dotnet run --project Sev.Mcp   # run against the live API
+dotnet run --project Sev.Api --launch-profile http          # MCP server on http://localhost:5133/mcp
+claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude Code to the local server
 ```
 
 - `.env` (gitignored) holds `SEV_USER` and `SEV_KEY`; nothing loads it automatically, so export it into the shell first. `Sev.Mcp` throws at startup if either is missing.
@@ -19,8 +21,8 @@ set -a; source .env; set +a; dotnet run --project Sev.Mcp   # run against the li
 ## Architecture
 
 - **Sev.Client**: class library with all API logic. `SevClient` wraps a caller-supplied `HttpClient` whose `BaseAddress` must be `https://api.sev.fo/api/CustomerRESTApi/`. `LoginAsync` stores the JWT on that `HttpClient`'s `DefaultRequestHeaders`, so later calls depend on login having happened on the same instance.
-- **Sev.Mcp**: console app that will become the MCP server. Currently a manual smoke test: logs in, lists meters, prints hourly usage for hardcoded meter IDs and dates.
-- **Sev.Api**: unmodified ASP.NET weatherforecast template; references Sev.Client but does not use it yet.
+- **Sev.Api**: the MCP server, using the Streamable HTTP transport (`ModelContextProtocol.AspNetCore`) at `/mcp`. It is HTTP rather than stdio so it can later be hosted and used as a custom connector from the Claude web and mobile apps.
+- **Sev.Mcp**: console app used as a manual smoke test: logs in, lists meters, prints hourly usage for hardcoded meter IDs and dates.
 
 ### JSON conventions
 - `SevClient` serializes with `JsonNamingPolicy.SnakeCaseLower`, so models are PascalCase positional records that map to the API's snake_case fields. Use `[property: JsonPropertyName(...)]` only when the C# name differs from the API name (e.g. `UsageReading.Value` ← `reading`).
