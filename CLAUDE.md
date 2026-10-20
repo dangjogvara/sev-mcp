@@ -36,4 +36,11 @@ set -a; source .env; set +a; dotnet run --project Sev.Mcp   # run against the li
 
 ## Workflow
 
-Work is tracked as a GitHub issue, implemented on a branch, and merged to `main` via a PR that closes the issue.
+Every change, including docs, goes through an issue and a PR. Never commit directly to `main`.
+
+1. `gh issue create` first.
+2. Branch from an up-to-date `main` as `feature/<issue#>-<slug>` (e.g. `feature/9-docs-and-claude-md`).
+3. Open the PR with `Closes #<issue#>` in the body.
+4. Only merge when asked: wait for CI to pass, then `gh pr merge <pr#> --squash --delete-branch`.
+
+Never rename the head branch of an open PR. GitHub closes the PR instead of retargeting it.
