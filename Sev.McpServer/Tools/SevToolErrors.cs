@@ -20,6 +20,15 @@ public static class SevToolErrors
         }
     }
 
+    // When the rate limit is exceeded, SEV answers 200 OK with an empty list instead of an error
+    // (observed 2026-11-21). An empty answer would otherwise read as "no meters" or "no usage".
+    public const string EmptyResultMessage =
+        "SEV returned no data. This usually means the SEV rate limit (10 calls per 5 minutes) has been reached; " +
+        "SEV doesn't report that as an error. Try again in about 5 minutes.";
+
+    public static IReadOnlyList<T> ThrowIfEmpty<T>(IReadOnlyList<T> result) =>
+        result.Count > 0 ? result : throw new McpException(EmptyResultMessage);
+
     public static string Describe(SevApiException ex) => ex.StatusCode switch
     {
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>

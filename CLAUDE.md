@@ -43,7 +43,7 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 - JWTs expire after 4 hours; `refresh_jwt_key_token` (POST, no body, current Bearer token) returns a new plain-text one, but only while the current token is still valid. After expiry, log in again.
 - All endpoints are POST. Date ranges are `[from_date, to_date)` and always in local Faroese time (send `DateTime` with `Kind` unspecified, no `Z`). `SevClient` throws `ArgumentException` for any other `Kind` or when `from >= to`, so convert at the boundary, not inside the client.
 - Not yet implemented in `SevClient`: `refresh_jwt_key_token`, `estimated_CO2` (same request/response shape as `hourly_kwh_usage`, values in kg CO2), and `estimated_cost` (same request; readings have `reading`, `unit`, `price_unit`, `tarif`, no `cumulative_value`; values in DKK).
-- Neither the PDF nor the spec documents what happens when the rate limit is exceeded (no 429 or `Retry-After`; the spec lists only `200`). Don't trigger it on purpose to find out.
+- **Over the rate limit, SEV returns `200 OK` with an empty list**, not an error (observed 2026-11-21: `get_available_meters` returned `[]` after ~11 calls in a few minutes, and the meters again after waiting 5 minutes; the docs don't mention it). So an empty result usually means throttling: the tools report it via `SevToolErrors.ThrowIfEmpty`. Don't trigger it on purpose, and keep manual testing to a few calls at a time.
 - Responses are standard HTTP status codes. On a non-success status `SevClient` throws `SevApiException` (derives from `HttpRequestException`) with `StatusCode`, `ResponseBody` and `RetryAfter`.
 
 ## Workflow
