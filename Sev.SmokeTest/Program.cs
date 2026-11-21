@@ -15,17 +15,17 @@ await client.LoginAsync(user, key);
 var customers = await client.GetAvailableMetersAsync();
 
 var rows = customers
-        .SelectMany(c => c.Installations)
-        .SelectMany(i => i.Meters, (i, m) => new { m.MeterId, m.MeterName, i.Address });
+    .SelectMany(c => c.Installations)
+    .SelectMany(i => i.Meters, (i, m) => new { m.MeterId, m.MeterName, i.Address })
+    .ToList();
 
 foreach (var r in rows)
-
 {
     Console.WriteLine($"{r.MeterId} {r.MeterName} {r.Address}");
 }
 
 var usage = await client.GetHourlyUsageAsync(
-    [7842, 71571],
+    rows.Select(r => r.MeterId).ToList(),
     new DateTime(2026, 10, 10),
     new DateTime(2026, 10, 11));
 

@@ -32,7 +32,6 @@ public class SevClient(HttpClient http)
 
         var customers = await response.Content.ReadFromJsonAsync<List<Customer>>(JsonOptions);
         return customers ?? [];
-
     }
 
     public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to)
@@ -48,8 +47,3 @@ public class SevClient(HttpClient http)
         return usage ?? [];
     }
 }
-
-
-
-
-
