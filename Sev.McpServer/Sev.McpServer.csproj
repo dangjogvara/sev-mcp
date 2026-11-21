@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
+  <PropertyGroup>
+    <UserSecretsId>c8b27e81-4c8d-45bc-9a28-f7da556135f2</UserSecretsId>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Sev.Client\Sev.Client.csproj" />
   </ItemGroup>

@@ -16,31 +16,6 @@ public class SevClientTests
     }
 
     [Fact]
-    public async Task LoginAsync_PostsSnakeCaseCredentials()
-    {
-        _handler.Respond("eyJtoken", mediaType: "text/plain");
-
-        await _client.LoginAsync("user@example.com", "secret");
-
-        var request = Assert.Single(_handler.Requests);
-        Assert.Equal(HttpMethod.Post, request.Method);
-        Assert.Equal(BaseAddress + "login_and_get_jwt_token", request.Uri.ToString());
-        Assert.Equal("""{"user_name":"user@example.com","password":"secret"}""", request.Body);
-    }
-
-    [Fact]
-    public async Task LoginAsync_SendsTokenAsBearerOnLaterRequests()
-    {
-        _handler.Respond("eyJtoken", mediaType: "text/plain");
-        _handler.Respond("[]");
-
-        await _client.LoginAsync("user@example.com", "secret");
-        await _client.GetAvailableMetersAsync();
-
-        Assert.Equal("Bearer eyJtoken", _handler.Requests[1].Authorization);
-    }
-
-    [Fact]
     public async Task GetAvailableMetersAsync_PostsToEndpoint()
     {
         _handler.Respond("[]");
@@ -155,16 +130,6 @@ public class SevClientTests
         var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
 
         Assert.Equal(TimeSpan.FromSeconds(90), ex.RetryAfter);
-    }
-
-    [Fact]
-    public async Task LoginAsync_ErrorStatus_ThrowsSevApiException()
-    {
-        _handler.Respond("invalid credentials", HttpStatusCode.Unauthorized, "text/plain");
-
-        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.LoginAsync("user@example.com", "wrong"));
-
-        Assert.Equal(HttpStatusCode.Unauthorized, ex.StatusCode);
     }
 
     public static TheoryData<DateTime, DateTime> InvalidRanges => new()
