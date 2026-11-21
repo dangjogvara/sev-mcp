@@ -66,8 +66,8 @@ public class SevDataServiceTests
     {
         _handler.Respond(UsageJson((1111, Day(-3), 24), (1111, Day(-2), 24)));
 
-        var first = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
-        var second = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
+        var first = await UsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
+        var second = await UsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
 
         Assert.Single(_handler.Requests);
         Assert.Equal(48, Assert.Single(first).Readings.Count);
@@ -79,8 +79,8 @@ public class SevDataServiceTests
     {
         _handler.Respond(UsageJson((1111, Day(-3), 24)));
 
-        var morning = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)).AddHours(6), Start(Day(-3)).AddHours(9));
-        var wholeDay = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
+        var morning = await UsageAsync([1111], Start(Day(-3)).AddHours(6), Start(Day(-3)).AddHours(9));
+        var wholeDay = await UsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
 
         Assert.Single(_handler.Requests);
         AssertRequest(_handler.Requests[0], [1111], Start(Day(-3)), Start(Day(-2)));
@@ -94,8 +94,8 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Day(-5), 24), (1111, Day(-4), 24)));
         _handler.Respond(UsageJson((1111, Day(-3), 24)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Day(-5)), Start(Day(-3)));
-        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-5)), Start(Day(-2)));
+        await UsageAsync([1111], Start(Day(-5)), Start(Day(-3)));
+        var result = await UsageAsync([1111], Start(Day(-5)), Start(Day(-2)));
 
         Assert.Equal(2, _handler.Requests.Count);
         AssertRequest(_handler.Requests[1], [1111], Start(Day(-3)), Start(Day(-2)));
@@ -108,8 +108,8 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Day(-3), 24)));
         _handler.Respond(UsageJson((2222, Day(-3), 24)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
-        var result = await _data.GetHourlyUsageAsync([1111, 2222], Start(Day(-3)), Start(Day(-2)));
+        await UsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
+        var result = await UsageAsync([1111, 2222], Start(Day(-3)), Start(Day(-2)));
 
         AssertRequest(_handler.Requests[1], [2222], Start(Day(-3)), Start(Day(-2)));
         Assert.Equal(["1111", "2222"], result.Select(m => m.MeterId));
@@ -122,8 +122,8 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Today, 12)));
         _handler.Respond(UsageJson((1111, Today, 12)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Today), Start(Today.AddDays(1)));
-        await _data.GetHourlyUsageAsync([1111], Start(Today), Start(Today.AddDays(1)));
+        await UsageAsync([1111], Start(Today), Start(Today.AddDays(1)));
+        await UsageAsync([1111], Start(Today), Start(Today.AddDays(1)));
 
         Assert.Equal(2, _handler.Requests.Count);
     }
@@ -134,8 +134,8 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Day(-1), 24)));
         _handler.Respond(UsageJson((1111, Today, 12)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Today));
-        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Today.AddDays(1)));
+        await UsageAsync([1111], Start(Day(-1)), Start(Today));
+        var result = await UsageAsync([1111], Start(Day(-1)), Start(Today.AddDays(1)));
 
         AssertRequest(_handler.Requests[1], [1111], Start(Today), Start(Today.AddDays(1)));
         Assert.Equal(36, result.Single().Readings.Count);
@@ -147,8 +147,8 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Day(-1), 20)));
         _handler.Respond(UsageJson((1111, Day(-1), 24)));
 
-        var first = await _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Today));
-        var second = await _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Today));
+        var first = await UsageAsync([1111], Start(Day(-1)), Start(Today));
+        var second = await UsageAsync([1111], Start(Day(-1)), Start(Today));
 
         Assert.Equal(2, _handler.Requests.Count);
         Assert.Equal(20, first.Single().Readings.Count);
@@ -162,10 +162,10 @@ public class SevDataServiceTests
         _handler.Respond("[]");
         _handler.Respond(UsageJson((1111, Day(-2), 24)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
+        await UsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
         // Day -3 is cached, but day -2 is missing and SEV answers empty: return nothing rather than half the range.
-        Assert.Empty(await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1))));
-        var retry = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
+        Assert.Empty(await UsageAsync([1111], Start(Day(-3)), Start(Day(-1))));
+        var retry = await UsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
 
         Assert.Equal(3, _handler.Requests.Count);
         Assert.Equal(48, retry.Single().Readings.Count);
@@ -174,7 +174,7 @@ public class SevDataServiceTests
     [Fact]
     public async Task Usage_InvalidRangeIsRejectedWithoutCallingApi()
     {
-        await Assert.ThrowsAsync<ArgumentException>(() => _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Day(-2))));
+        await Assert.ThrowsAsync<ArgumentException>(() => UsageAsync([1111], Start(Day(-1)), Start(Day(-2))));
 
         Assert.Empty(_handler.Requests);
     }
@@ -187,7 +187,7 @@ public class SevDataServiceTests
         _handler.Respond(UsageJson((1111, Day(-1), 24)));
 
         var calls = Enumerable.Range(0, 5)
-            .Select(_ => _data.GetHourlyUsageAsync([1111], Start(Day(-1)), Start(Today)))
+            .Select(_ => UsageAsync([1111], Start(Day(-1)), Start(Today)))
             .ToList();
         gate.SetResult();
         var results = await Task.WhenAll(calls);
@@ -195,6 +195,100 @@ public class SevDataServiceTests
         Assert.Single(_handler.Requests);
         Assert.All(results, r => Assert.Equal(24, r.Single().Readings.Count));
     }
+
+    // --- Long ranges: SEV returns at most 31 days per call ---
+
+    [Fact]
+    public async Task Usage_LongRangeIsFetchedIn31DayPiecesNewestFirst()
+    {
+        // 60 days before today: two pieces, the newest 31 days first.
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-31), 31)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-60), 29)));
+
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-60)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[0], [1111], Start(Day(-31)), Start(Today));
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-60)), Start(Day(-31)));
+        Assert.Null(result.NotFetched);
+        Assert.Equal(60 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_AtMostSixPiecesPerCall_RestIsReportedAndFetchedNextTime()
+    {
+        // 8 pieces of 31 days = 248 days.
+        for (var piece = 1; piece <= 8; piece++)
+        {
+            _handler.Respond(UsageJson(DaysOf(1111, Day(-31 * piece), 31)));
+        }
+
+        var first = await _data.GetHourlyUsageAsync([1111], Start(Day(-248)), Start(Today));
+
+        Assert.Equal(SevDataService.MaxRequestsPerCall, _handler.Requests.Count);
+        Assert.Equal((Start(Day(-248)), Start(Day(-186))), first.NotFetched);
+        Assert.Equal(186 * 24, first.Meters.Single().Readings.Count);
+
+        // The fetched days are cached, so the second call only fetches the two oldest pieces.
+        var second = await _data.GetHourlyUsageAsync([1111], Start(Day(-248)), Start(Today));
+
+        Assert.Equal(8, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[6], [1111], Start(Day(-217)), Start(Day(-186)));
+        AssertRequest(_handler.Requests[7], [1111], Start(Day(-248)), Start(Day(-217)));
+        Assert.Null(second.NotFetched);
+        Assert.Equal(248 * 24, second.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_EmptyAnswerPartway_KeepsWhatWasFetched()
+    {
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-31), 31)));
+        _handler.Respond("[]");
+
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-60)), Start(Today));
+
+        Assert.Equal((Start(Day(-60)), Start(Day(-31))), result.NotFetched);
+        Assert.Equal(31 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_RateLimitPartway_KeepsWhatWasFetched()
+    {
+        var limited = new SevDataService(
+            new SevClient(new HttpClient(new SevRateLimitHandler(new SevRateLimiter(_time, maxCalls: 1)) { InnerHandler = _handler })
+            {
+                BaseAddress = SevClient.DefaultBaseAddress
+            }),
+            _cache);
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-31), 31)));
+
+        var result = await limited.GetHourlyUsageAsync([1111], Start(Day(-60)), Start(Today));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal((Start(Day(-60)), Start(Day(-31))), result.NotFetched);
+        Assert.Equal(31 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_RangeIntoToday_PiecesEndOnMidnight()
+    {
+        // 40 days ending at 15:00 today: the newest piece is 30 whole days plus today's part.
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-30), 30)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-40), 10)));
+
+        await _data.GetHourlyUsageAsync([1111], Start(Day(-40)), Start(Today).AddHours(15));
+
+        AssertRequest(_handler.Requests[0], [1111], Start(Day(-30)), Start(Today).AddHours(15));
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-40)), Start(Day(-30)));
+    }
+
+    // For tests that only look at the readings, not at what wasn't fetched.
+    private async Task<IReadOnlyList<MeterUsage>> UsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to) =>
+        (await _data.GetHourlyUsageAsync(meterIds, from, to)).Meters;
+
+    // (meter, day, 24) for `count` days from `first`.
+    private static (int Meter, DateOnly Day, int Hours)[] DaysOf(int meter, DateOnly first, int count) =>
+        Enumerable.Range(0, count).Select(d => (meter, first.AddDays(d), 24)).ToArray();
 
     private static DateOnly Day(int offsetFromToday) => Today.AddDays(offsetFromToday);
 
