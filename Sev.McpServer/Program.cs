@@ -40,7 +40,8 @@ var toolJsonOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
 builder.Services
     .AddMcpServer()
     .WithHttpTransport()
-    .WithTools<MeterTools>(toolJsonOptions);
+    .WithTools<MeterTools>(toolJsonOptions)
+    .WithTools<UsageTools>(toolJsonOptions);
 
 var app = builder.Build();
 
