@@ -7,7 +7,7 @@ using Sev.Client.Models;
 namespace Sev.McpServer.Tools;
 
 [McpServerToolType]
-public class UsageTools(SevClient sev)
+public class UsageTools(SevDataService sev)
 {
     // Hourly readings for longer periods would flood Claude's context (about 720 readings per meter per month).
     public static readonly TimeSpan MaxRange = TimeSpan.FromDays(31);
@@ -18,7 +18,7 @@ public class UsageTools(SevClient sev)
         "Times are local Faroese time and the range is [from, to): 'to' is not included, so yesterday is " +
         "from yesterday 00:00 to today 00:00. At most 31 days per call. " +
         "The SEV API allows only 10 calls per 5 minutes, so request all meters and the whole period in one call " +
-        "instead of several small ones.")]
+        "instead of several small ones. Completed past days are cached, so asking about them again is cheap.")]
     public Task<IReadOnlyList<MeterUsageResult>> GetHourlyUsageAsync(
         [Description("Meter IDs from list_meters.")] int[] meterIds,
         [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,

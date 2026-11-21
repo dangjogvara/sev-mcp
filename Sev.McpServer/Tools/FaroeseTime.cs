@@ -1,4 +1,5 @@
 using System.Globalization;
+using Sev.Client;
 
 namespace Sev.McpServer.Tools;
 
@@ -7,9 +8,6 @@ namespace Sev.McpServer.Tools;
 // them into Faroese wall-clock time.
 public static class FaroeseTime
 {
-    // Needs the system time-zone database; slim container images may lack it (install tzdata).
-    private static readonly Lazy<TimeZoneInfo> Zone = new(() => TimeZoneInfo.FindSystemTimeZoneById("Atlantic/Faroe"));
-
     public static bool TryParse(string? text, out DateTime localTime)
     {
         localTime = default;
@@ -32,7 +30,7 @@ public static class FaroeseTime
 
         // Parse again keeping the original offset, then convert to Faroese time.
         var withOffset = DateTimeOffset.Parse(text, CultureInfo.InvariantCulture);
-        localTime = DateTime.SpecifyKind(TimeZoneInfo.ConvertTime(withOffset, Zone.Value).DateTime, DateTimeKind.Unspecified);
+        localTime = DateTime.SpecifyKind(TimeZoneInfo.ConvertTime(withOffset, SevTime.Zone).DateTime, DateTimeKind.Unspecified);
         return true;
     }
 }
