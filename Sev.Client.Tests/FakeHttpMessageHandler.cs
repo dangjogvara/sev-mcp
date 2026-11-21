@@ -11,6 +11,10 @@ public class FakeHttpMessageHandler : HttpMessageHandler
 
     public List<RecordedRequest> Requests { get; } = [];
 
+    // When set, every request waits for this task before getting its response,
+    // so a test can start several calls at the same time.
+    public Task? Gate { get; set; }
+
     // Returns the queued response so a test can add headers to it.
     public HttpResponseMessage Respond(string body, HttpStatusCode status = HttpStatusCode.OK, string mediaType = "application/json")
     {
@@ -29,6 +33,11 @@ public class FakeHttpMessageHandler : HttpMessageHandler
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
         Requests.Add(new RecordedRequest(request.Method, request.RequestUri!, request.Headers.Authorization?.ToString(), body));
+
+        if (Gate is not null)
+        {
+            await Gate.WaitAsync(cancellationToken);
+        }
 
         return _responses.Count > 0
             ? _responses.Dequeue()

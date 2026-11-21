@@ -12,18 +12,21 @@ A .NET 10 client for SEV's (Faroese electricity utility) customer REST API, inte
 dotnet build                                   # build the whole solution (SevMcp.slnx)
 dotnet test                                    # run Sev.Client.Tests (no network)
 set -a; source .env; set +a; dotnet run --project Sev.SmokeTest   # run against the live API
+dotnet user-secrets set "Sev:User" "..." --project Sev.McpServer  # one-time: credentials for the server
+dotnet user-secrets set "Sev:Key" "..." --project Sev.McpServer
 dotnet run --project Sev.McpServer --launch-profile http          # MCP server on http://localhost:5133/mcp
 claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude Code to the local server
 ```
 
-- `.env` (gitignored) holds `SEV_USER` and `SEV_KEY`; nothing loads it automatically, so export it into the shell first. `Sev.SmokeTest` throws at startup if either is missing.
+- `.env` (gitignored) holds `SEV_USER` and `SEV_KEY` for `Sev.SmokeTest`; nothing loads it automatically, so export it into the shell first. `Sev.SmokeTest` throws at startup if either is missing.
+- `Sev.McpServer` reads credentials from the `Sev` configuration section (`SevOptions`): user-secrets locally (loaded only in the Development environment, which the launch profile sets), `Sev__User` / `Sev__Key` environment variables when hosted. It refuses to start if either is missing.
 - Shared project settings (`TargetFramework`, `Nullable`, `ImplicitUsings`) live in `Directory.Build.props`, not in each `.csproj`.
 - CI (`.github/workflows/ci.yml`) runs `dotnet restore`, `dotnet build` and `dotnet test`.
 
 ## Architecture
 
-- **Sev.Client**: class library with all API logic. `SevClient` wraps a caller-supplied `HttpClient` whose `BaseAddress` must be `SevClient.DefaultBaseAddress` (the constructor rejects a missing base address or one without the trailing `/`). Every public method takes an optional `CancellationToken`; pass it through from MCP tool handlers. `LoginAsync` stores the JWT on that `HttpClient`'s `DefaultRequestHeaders`, so later calls depend on login having happened on the same instance.
-- **Sev.McpServer**: the MCP server, using the Streamable HTTP transport (`ModelContextProtocol.AspNetCore`) at `/mcp`. It is HTTP rather than stdio so it can later be hosted and used as a custom connector from the Claude web and mobile apps.
+- **Sev.Client**: class library with all API logic. `SevClient` wraps a caller-supplied `HttpClient` whose `BaseAddress` must be `SevClient.DefaultBaseAddress` (the constructor rejects a missing base address or one without the trailing `/`). Every public method takes an optional `CancellationToken`; pass it through from MCP tool handlers. `SevClient` doesn't log in itself: its `HttpClient` must include `SevAuthHandler`, which adds the Bearer token from `SevTokenProvider` to each request. `SevTokenProvider` logs in on first use, once, with its own `HttpClient` (not through `SevAuthHandler`), and must be a singleton so all requests share one token.
+- **Sev.McpServer**: the MCP server, using the Streamable HTTP transport (`ModelContextProtocol.AspNetCore`) at `/mcp`. `Program.cs` registers `SevTokenProvider` as a singleton and `SevClient` as a typed `HttpClient` with `SevAuthHandler`, so tools get a ready-to-use `SevClient` by injection. It is HTTP rather than stdio so it can later be hosted and used as a custom connector from the Claude web and mobile apps.
 - **Sev.Client.Tests**: xUnit tests for `SevClient`. `FakeHttpMessageHandler` returns canned responses and records requests, so tests never call the real API. `Fixtures/*.json` are sanitized copies of real API responses; keep their structure and field names exact when editing.
 - **Sev.SmokeTest**: console app used as a manual smoke test: logs in, lists meters, prints hourly usage for all of the account's meters on a hardcoded date.
 

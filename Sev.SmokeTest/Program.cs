@@ -5,13 +5,13 @@ var user = Environment.GetEnvironmentVariable("SEV_USER")
 var key = Environment.GetEnvironmentVariable("SEV_KEY")
     ?? throw new InvalidOperationException("SEV_KEY not set");
 
-var http = new HttpClient
+var tokens = new SevTokenProvider(new HttpClient { BaseAddress = SevClient.DefaultBaseAddress }, user, key);
+var http = new HttpClient(new SevAuthHandler(tokens) { InnerHandler = new HttpClientHandler() })
 {
     BaseAddress = SevClient.DefaultBaseAddress
 };
 var client = new SevClient(http);
 
-await client.LoginAsync(user, key);
 var customers = await client.GetAvailableMetersAsync();
 
 var rows = customers

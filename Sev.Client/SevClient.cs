@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Sev.Client.Models;
@@ -9,37 +8,18 @@ public class SevClient
 {
     public static readonly Uri DefaultBaseAddress = new("https://api.sev.fo/api/CustomerRESTApi/");
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
     private readonly HttpClient _http;
 
+    // The HttpClient must send a Bearer token on every request, normally through SevAuthHandler.
     public SevClient(HttpClient http)
     {
-        // Without the trailing slash, "hourly_kwh_usage" would resolve against /api/ instead of /api/CustomerRESTApi/.
-        if (http.BaseAddress is null || !http.BaseAddress.AbsoluteUri.EndsWith('/'))
-        {
-            throw new ArgumentException(
-                $"HttpClient.BaseAddress must be set and end with '/', e.g. {DefaultBaseAddress}", nameof(http));
-        }
-
+        ValidateBaseAddress(http);
         _http = http;
-    }
-
-    public async Task LoginAsync(string userName, string apiKey, CancellationToken cancellationToken = default)
-    {
-        using var response = await _http.PostAsJsonAsync(
-            "login_and_get_jwt_token",
-            new { UserName = userName, Password = apiKey },
-            JsonOptions,
-            cancellationToken
-        );
-        await EnsureSuccessAsync(response, cancellationToken);
-
-        var token = await response.Content.ReadAsStringAsync(cancellationToken);
-        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
     public async Task<IReadOnlyList<Customer>> GetAvailableMetersAsync(CancellationToken cancellationToken = default)
@@ -82,7 +62,17 @@ public class SevClient
         }
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    // Without the trailing slash, "hourly_kwh_usage" would resolve against /api/ instead of /api/CustomerRESTApi/.
+    internal static void ValidateBaseAddress(HttpClient http)
+    {
+        if (http.BaseAddress is null || !http.BaseAddress.AbsoluteUri.EndsWith('/'))
+        {
+            throw new ArgumentException(
+                $"HttpClient.BaseAddress must be set and end with '/', e.g. {DefaultBaseAddress}", nameof(http));
+        }
+    }
+
+    internal static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
