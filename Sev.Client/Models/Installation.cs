@@ -11,5 +11,5 @@ public record Installation(
     string PostalDistrict,
     int TarifNumber,
     string BillingType,
-    List<Meter> Meters
+    IReadOnlyList<Meter> Meters
 );

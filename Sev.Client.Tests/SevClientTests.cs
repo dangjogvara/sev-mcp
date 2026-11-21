@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 
 namespace Sev.Client.Tests;
 
@@ -11,7 +12,7 @@ public class SevClientTests
 
     public SevClientTests()
     {
-        _client = new SevClient(new HttpClient(_handler) { BaseAddress = new Uri(BaseAddress) });
+        _client = new SevClient(new HttpClient(_handler) { BaseAddress = SevClient.DefaultBaseAddress });
     }
 
     [Fact]
@@ -120,13 +121,76 @@ public class SevClientTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("https://api.sev.fo/api/CustomerRESTApi")]
+    public void Constructor_RejectsBaseAddressWithoutTrailingSlash(string? baseAddress)
+    {
+        var http = new HttpClient(_handler) { BaseAddress = baseAddress is null ? null : new Uri(baseAddress) };
+
+        Assert.Throws<ArgumentException>(() => new SevClient(http));
+    }
+
+    [Theory]
     [InlineData(HttpStatusCode.Unauthorized)]
     [InlineData(HttpStatusCode.TooManyRequests)]
     [InlineData(HttpStatusCode.BadRequest)]
-    public async Task ErrorStatus_Throws(HttpStatusCode status)
+    public async Task ErrorStatus_ThrowsSevApiExceptionWithStatusAndBody(HttpStatusCode status)
     {
-        _handler.Respond("", status);
+        _handler.Respond("something went wrong", status, "text/plain");
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => _client.GetAvailableMetersAsync());
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Equal(status, ex.StatusCode);
+        Assert.Equal("something went wrong", ex.ResponseBody);
+        Assert.Contains("something went wrong", ex.Message);
+        Assert.Null(ex.RetryAfter);
+    }
+
+    [Fact]
+    public async Task ErrorStatus_ExposesRetryAfter()
+    {
+        _handler.Respond("", HttpStatusCode.TooManyRequests).Headers.RetryAfter =
+            new RetryConditionHeaderValue(TimeSpan.FromSeconds(90));
+
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Equal(TimeSpan.FromSeconds(90), ex.RetryAfter);
+    }
+
+    [Fact]
+    public async Task LoginAsync_ErrorStatus_ThrowsSevApiException()
+    {
+        _handler.Respond("invalid credentials", HttpStatusCode.Unauthorized, "text/plain");
+
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.LoginAsync("user@example.com", "wrong"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, ex.StatusCode);
+    }
+
+    public static TheoryData<DateTime, DateTime> InvalidRanges => new()
+    {
+        { new DateTime(2026, 10, 10, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 11) },
+        { new DateTime(2026, 10, 10), new DateTime(2026, 10, 11, 0, 0, 0, DateTimeKind.Local) },
+        { new DateTime(2026, 10, 10), new DateTime(2026, 10, 10) },
+        { new DateTime(2026, 10, 11), new DateTime(2026, 10, 10) },
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidRanges))]
+    public async Task GetHourlyUsageAsync_RejectsInvalidRangeWithoutCallingApi(DateTime from, DateTime to)
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _client.GetHourlyUsageAsync([1111], from, to));
+
+        Assert.Empty(_handler.Requests);
+    }
+
+    [Fact]
+    public async Task CancelledToken_IsPassedToHttpClient()
+    {
+        _handler.Respond("[]");
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _client.GetAvailableMetersAsync(cts.Token));
     }
 }

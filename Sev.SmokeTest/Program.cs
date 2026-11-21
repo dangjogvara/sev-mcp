@@ -7,7 +7,7 @@ var key = Environment.GetEnvironmentVariable("SEV_KEY")
 
 var http = new HttpClient
 {
-    BaseAddress = new Uri("https://api.sev.fo/api/CustomerRESTApi/")
+    BaseAddress = SevClient.DefaultBaseAddress
 };
 var client = new SevClient(http);
 

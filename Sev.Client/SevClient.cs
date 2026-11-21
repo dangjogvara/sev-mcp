@@ -5,45 +5,95 @@ using Sev.Client.Models;
 
 namespace Sev.Client;
 
-public class SevClient(HttpClient http)
+public class SevClient
 {
+    public static readonly Uri DefaultBaseAddress = new("https://api.sev.fo/api/CustomerRESTApi/");
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
     };
 
-    public async Task LoginAsync(string userName, string apiKey)
-    {
-        var response = await http.PostAsJsonAsync(
-            "login_and_get_jwt_token",
-            new { UserName = userName, Password = apiKey },
-            JsonOptions
-        );
-        response.EnsureSuccessStatusCode();
+    private readonly HttpClient _http;
 
-        var token = await response.Content.ReadAsStringAsync();
-        http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    public SevClient(HttpClient http)
+    {
+        // Without the trailing slash, "hourly_kwh_usage" would resolve against /api/ instead of /api/CustomerRESTApi/.
+        if (http.BaseAddress is null || !http.BaseAddress.AbsoluteUri.EndsWith('/'))
+        {
+            throw new ArgumentException(
+                $"HttpClient.BaseAddress must be set and end with '/', e.g. {DefaultBaseAddress}", nameof(http));
+        }
+
+        _http = http;
     }
 
-    public async Task<List<Customer>> GetAvailableMetersAsync()
+    public async Task LoginAsync(string userName, string apiKey, CancellationToken cancellationToken = default)
     {
-        var response = await http.PostAsync("get_available_meters", null);
-        response.EnsureSuccessStatusCode();
+        using var response = await _http.PostAsJsonAsync(
+            "login_and_get_jwt_token",
+            new { UserName = userName, Password = apiKey },
+            JsonOptions,
+            cancellationToken
+        );
+        await EnsureSuccessAsync(response, cancellationToken);
 
-        var customers = await response.Content.ReadFromJsonAsync<List<Customer>>(JsonOptions);
+        var token = await response.Content.ReadAsStringAsync(cancellationToken);
+        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
+
+    public async Task<IReadOnlyList<Customer>> GetAvailableMetersAsync(CancellationToken cancellationToken = default)
+    {
+        using var response = await _http.PostAsync("get_available_meters", null, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var customers = await response.Content.ReadFromJsonAsync<List<Customer>>(JsonOptions, cancellationToken);
         return customers ?? [];
     }
 
-    public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to)
+    public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
     {
-        var request = new HourlyUsageRequest(meterIds, from, to);
+        ValidateRange(from, to);
+        var request = new UsageRequest(meterIds, from, to);
 
-        var response = await http.PostAsJsonAsync("hourly_kwh_usage", request, JsonOptions);
+        using var response = await _http.PostAsJsonAsync("hourly_kwh_usage", request, JsonOptions, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
 
-        response.EnsureSuccessStatusCode();
-
-        var usage = await response.Content.ReadFromJsonAsync<List<MeterUsage>>(JsonOptions);
-
+        var usage = await response.Content.ReadFromJsonAsync<List<MeterUsage>>(JsonOptions, cancellationToken);
         return usage ?? [];
+    }
+
+    // The API works in local Faroese time and serializes DateTime as-is, so a Utc or Local
+    // DateTime would be sent with "Z" or an offset and shift the requested hours.
+    private static void ValidateRange(DateTime from, DateTime to)
+    {
+        if (from.Kind != DateTimeKind.Unspecified)
+        {
+            throw new ArgumentException("Must be local Faroese time with DateTimeKind.Unspecified.", nameof(from));
+        }
+        if (to.Kind != DateTimeKind.Unspecified)
+        {
+            throw new ArgumentException("Must be local Faroese time with DateTimeKind.Unspecified.", nameof(to));
+        }
+        if (from >= to)
+        {
+            throw new ArgumentException("Must be before 'to'; the range is [from, to).", nameof(from));
+        }
+    }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var retryAfter = response.Headers.RetryAfter;
+        throw new SevApiException(
+            response.StatusCode,
+            body,
+            retryAfter?.Delta ?? retryAfter?.Date - DateTimeOffset.UtcNow);
     }
 }
