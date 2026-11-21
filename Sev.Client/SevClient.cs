@@ -46,7 +46,7 @@ public class SevClient
 
     // The API works in local Faroese time and serializes DateTime as-is, so a Utc or Local
     // DateTime would be sent with "Z" or an offset and shift the requested hours.
-    private static void ValidateRange(DateTime from, DateTime to)
+    internal static void ValidateRange(DateTime from, DateTime to)
     {
         if (from.Kind != DateTimeKind.Unspecified)
         {

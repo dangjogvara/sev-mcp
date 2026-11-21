@@ -39,6 +39,10 @@ builder.Services
     .AddHttpMessageHandler<SevAuthHandler>()
     .AddHttpMessageHandler<SevRateLimitHandler>();
 
+// The cache outlives requests; the service that uses it is created per use, like the SevClient it wraps.
+builder.Services.AddSingleton(new SevCache());
+builder.Services.AddTransient<SevDataService>();
+
 // Keep æ, ø, á etc. as-is in tool results instead of \u00e6 escapes, which are harder to read and cost more tokens.
 var toolJsonOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
 {
