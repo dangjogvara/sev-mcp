@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A .NET 10 client for SEV's (Faroese electricity utility) customer REST API, intended to become an MCP server exposing meter and usage data. The API reference is `docs/sev_rest_api_docs.pdf`.
+A .NET 10 client for SEV's (Faroese electricity utility) customer REST API, intended to become an MCP server exposing meter and usage data. The API reference is `docs/sev_rest_api_docs.pdf` (read it with `pdftotext -layout`). SEV's OpenAPI spec at https://github.com/dragan-norliga/sev-rest-clients/blob/master/DotNetExampleClient/api/openapi.yaml is more precise about field types and nullability; its example values (dates with `Z`/offsets, `application/json-patch+json`) are Swagger-generated and don't match the real API.
 
 ## Commands
 
@@ -30,14 +30,16 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 ### JSON conventions
 - `SevClient` serializes with `JsonNamingPolicy.SnakeCaseLower`, so models are PascalCase positional records that map to the API's snake_case fields. Use `[property: JsonPropertyName(...)]` only when the C# name differs from the API name (e.g. `UsageReading.Value` ← `reading`).
 - `meter_id` is an `int` in `get_available_meters` but a `string` in usage responses; the models reflect this intentionally.
+- The spec types `install_date`/`removal_date` as free-form nullable strings and `meter_nickname` as `object`. `Meter` reads them through the lenient converters in `Sev.Client/Json/`, so an unexpected value becomes `null` instead of failing the whole meter list.
 
 ## SEV API constraints
 
 - **Rate limit: 10 calls per 5 minutes per customer**, login included. Reuse tokens and cache the meter list rather than calling per request.
 - `login_and_get_jwt_token` returns the JWT as `text/plain` (no JSON quotes, no trailing newline).
-- JWTs expire after 4 hours; `refresh_jwt_key_token` (POST, no body, current Bearer token) returns a new one.
+- JWTs expire after 4 hours; `refresh_jwt_key_token` (POST, no body, current Bearer token) returns a new plain-text one, but only while the current token is still valid. After expiry, log in again.
 - All endpoints are POST. Date ranges are `[from_date, to_date)` and always in local Faroese time (send `DateTime` with `Kind` unspecified, no `Z`). `SevClient` throws `ArgumentException` for any other `Kind` or when `from >= to`, so convert at the boundary, not inside the client.
 - Not yet implemented in `SevClient`: `refresh_jwt_key_token`, `estimated_CO2` (same request/response shape as `hourly_kwh_usage`, values in kg CO2), and `estimated_cost` (same request; readings have `reading`, `unit`, `price_unit`, `tarif`, no `cumulative_value`; values in DKK).
+- Neither the PDF nor the spec documents what happens when the rate limit is exceeded (no 429 or `Retry-After`; the spec lists only `200`). Don't trigger it on purpose to find out.
 - Responses are standard HTTP status codes. On a non-success status `SevClient` throws `SevApiException` (derives from `HttpRequestException`) with `StatusCode`, `ResponseBody` and `RetryAfter`.
 
 ## Workflow
