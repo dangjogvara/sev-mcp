@@ -1,0 +1,36 @@
+[
+  {
+    "meter_id": "2222",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 1.167,
+        "cumulative_value": 18184.133,
+        "unit": "kWh"
+      },
+      {
+        "time_stamp": "2026-10-10T01:00:00",
+        "reading": 0.7539999999971769,
+        "cumulative_value": 18184.887,
+        "unit": "kWh"
+      },
+      {
+        "time_stamp": "2026-10-10T02:00:00",
+        "reading": 0.787,
+        "cumulative_value": 18185.674,
+        "unit": "kWh"
+      }
+    ]
+  },
+  {
+    "meter_id": "1111",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 1.165,
+        "cumulative_value": 50213.402,
+        "unit": "kWh"
+      }
+    ]
+  }
+]
