@@ -18,6 +18,12 @@ public static class SevToolErrors
         {
             throw new McpException(Describe(ex), ex);
         }
+        catch (SevRateLimitExceededException ex)
+        {
+            throw new McpException(
+                $"The SEV API allows only 10 calls per 5 minutes and they are used up. Try again in {Math.Ceiling(ex.RetryAfter.TotalSeconds)} seconds.",
+                ex);
+        }
     }
 
     // When the rate limit is exceeded, SEV answers 200 OK with an empty list instead of an error

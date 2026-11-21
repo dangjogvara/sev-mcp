@@ -5,8 +5,13 @@ var user = Environment.GetEnvironmentVariable("SEV_USER")
 var key = Environment.GetEnvironmentVariable("SEV_KEY")
     ?? throw new InvalidOperationException("SEV_KEY not set");
 
-var tokens = new SevTokenProvider(new HttpClient { BaseAddress = SevClient.DefaultBaseAddress }, user, key);
-var http = new HttpClient(new SevAuthHandler(tokens) { InnerHandler = new HttpClientHandler() })
+var limiter = new SevRateLimiter();
+var loginHttp = new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() })
+{
+    BaseAddress = SevClient.DefaultBaseAddress
+};
+var tokens = new SevTokenProvider(loginHttp, user, key);
+var http = new HttpClient(new SevAuthHandler(tokens) { InnerHandler = new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() } })
 {
     BaseAddress = SevClient.DefaultBaseAddress
 };

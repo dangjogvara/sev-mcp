@@ -14,22 +14,30 @@ builder.Services
     .ValidateDataAnnotations()
     .ValidateOnStart();
 
+// One rate limiter for every SEV call (login included), shared by both HttpClients below.
+builder.Services.AddSingleton(new SevRateLimiter());
+builder.Services.AddTransient<SevRateLimitHandler>();
+
 // One token provider for the whole server, so all tool calls share one login.
 // It keeps its own long-lived HttpClient for login; PooledConnectionLifetime makes it pick up DNS changes.
 builder.Services.AddSingleton(sp =>
 {
     var options = sp.GetRequiredService<IOptions<SevOptions>>().Value;
-    var http = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) })
+    var network = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) };
+    var http = new HttpClient(new SevRateLimitHandler(sp.GetRequiredService<SevRateLimiter>()) { InnerHandler = network })
     {
         BaseAddress = SevClient.DefaultBaseAddress
     };
     return new SevTokenProvider(http, options.User, options.Key);
 });
 
+// Handlers run in the order added: SevAuthHandler first (may log in), then SevRateLimitHandler
+// right before the network, so only requests that are actually sent are counted.
 builder.Services.AddTransient<SevAuthHandler>();
 builder.Services
     .AddHttpClient<SevClient>(http => http.BaseAddress = SevClient.DefaultBaseAddress)
-    .AddHttpMessageHandler<SevAuthHandler>();
+    .AddHttpMessageHandler<SevAuthHandler>()
+    .AddHttpMessageHandler<SevRateLimitHandler>();
 
 // Keep æ, ø, á etc. as-is in tool results instead of \u00e6 escapes, which are harder to read and cost more tokens.
 var toolJsonOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
