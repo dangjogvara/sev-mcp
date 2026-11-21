@@ -276,6 +276,68 @@ public class UsageToolsTests
         Assert.DoesNotContain("not zero usage", meter.Note);
     }
 
+    // --- Meters installed or removed within the range ---
+
+    [Fact]
+    public void Summarize_MeterInstalledInRange_ExpectsHoursFromItsFirstReading()
+    {
+        // Installed on the 11th, first reading at 08:00.
+        var meter = Heat with { InstallDate = new DateOnly(2026, 10, 11) };
+        var readings = Hours(Day(2026, 10, 11).AddHours(8), 16).Concat(Hours(Day(2026, 10, 12), 24)).ToList();
+
+        var result = Assert.Single(UsageTools.Summarize(
+            [meter], [new MeterUsage("2222", readings)], Day(2026, 10, 1), Day(2026, 10, 13), Later, Granularity.Day));
+
+        Assert.Equal(40, result.ExpectedHours);
+        Assert.Equal(0, result.MissingHours);
+        Assert.Null(result.Note);
+        Assert.Equal([new UsagePeriod("2026-10-11", 16m, null), new UsagePeriod("2026-10-12", 24m, null)], result.Periods);
+    }
+
+    [Fact]
+    public void Summarize_MeterRemovedInRange_ExpectsHoursUpToItsLastReading()
+    {
+        // Removed on the 11th, last reading at 11:00.
+        var meter = Heat with { RemovalDate = new DateOnly(2026, 10, 11), Removed = true };
+        var readings = Hours(Day(2026, 10, 10), 24).Concat(Hours(Day(2026, 10, 11), 12)).ToList();
+
+        var result = Assert.Single(UsageTools.Summarize(
+            [meter], [new MeterUsage("2222", readings)], Day(2026, 10, 10), Day(2026, 11, 1), Later, Granularity.Month));
+
+        Assert.Equal(36, result.ExpectedHours);
+        Assert.Equal(0, result.MissingHours);
+        Assert.Null(result.Note);
+        Assert.Equal([new UsagePeriod("2026-10", 36m, null)], result.Periods);
+    }
+
+    [Fact]
+    public void Summarize_InstallDayWithoutReadings_IsExpectedInFull()
+    {
+        var meter = Heat with { InstallDate = new DateOnly(2026, 10, 11) };
+
+        var result = Assert.Single(UsageTools.Summarize(
+            [meter], [new MeterUsage("2222", [])], Day(2026, 10, 10), Day(2026, 10, 12), Later, Granularity.Day));
+
+        Assert.Equal(24, result.ExpectedHours);
+        Assert.Equal(24, result.MissingHours);
+        Assert.Contains("not zero", result.Note);
+        Assert.Equal([new UsagePeriod("2026-10-11", null, 24)], result.Periods);
+    }
+
+    [Fact]
+    public void Summarize_MeterNotInstalledDuringRange_SaysSo()
+    {
+        var result = Assert.Single(UsageTools.Summarize(
+            [Old], [], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day));
+
+        Assert.Null(result.Total);
+        Assert.Equal(0, result.ExpectedHours);
+        Assert.Equal(0, result.MissingHours);
+        Assert.Contains("wasn't installed during this period (installed 2013-03-12, removed 2024-01-01)", result.Note);
+        Assert.DoesNotContain("missing", result.Note);
+        Assert.Empty(result.Periods);
+    }
+
     [Theory]
     // Summer time starts 2026-03-29 (01:00 → 02:00): 23 local hours.
     [InlineData(2026, 3, 29, 23)]
