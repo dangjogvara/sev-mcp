@@ -68,7 +68,7 @@ The server has **no authentication**, so it only accepts requests from the same 
 | `Sev.Client.Tests`, `Sev.McpServer.Tests` | xUnit tests. They never call the real API. |
 | `Sev.SmokeTest` | A small console app that logs in and prints meters and one day of usage from the live API. |
 
-SEV's API reference is in [`docs/`](docs). [CLAUDE.md](CLAUDE.md) has more detail on the design and on what has been learned about the API's behaviour.
+SEV provides an API reference document to its API customers. An [OpenAPI description](https://github.com/dragan-norliga/sev-rest-clients/blob/master/DotNetExampleClient/api/openapi.yaml) of the API is also available. [CLAUDE.md](CLAUDE.md) has more detail on the design and on what has been learned about the API's behaviour.
 
 ## Development
 
@@ -84,3 +84,7 @@ set -a; source .env; set +a; dotnet run --project Sev.SmokeTest
 ```
 
 Every run uses some of your 10 calls per 5 minutes, so keep manual testing to a few calls at a time.
+
+## License
+
+[MIT](LICENSE)

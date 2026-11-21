@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# SEV API reference PDF: SEV's document, kept locally only
+docs/sev_rest_api_docs.pdf
