@@ -18,3 +18,4 @@ jobs:
 
       - run: dotnet restore
       - run: dotnet build --no-restore
+      - run: dotnet test --no-build
