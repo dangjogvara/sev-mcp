@@ -1,6 +1,10 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.Extensions.Options;
+using ModelContextProtocol;
 using Sev.Client;
 using Sev.McpServer;
+using Sev.McpServer.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,9 +31,16 @@ builder.Services
     .AddHttpClient<SevClient>(http => http.BaseAddress = SevClient.DefaultBaseAddress)
     .AddHttpMessageHandler<SevAuthHandler>();
 
+// Keep æ, ø, á etc. as-is in tool results instead of \u00e6 escapes, which are harder to read and cost more tokens.
+var toolJsonOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
+{
+    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+};
+
 builder.Services
     .AddMcpServer()
-    .WithHttpTransport();
+    .WithHttpTransport()
+    .WithTools<MeterTools>(toolJsonOptions);
 
 var app = builder.Build();
 
