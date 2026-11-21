@@ -6,9 +6,19 @@ namespace Sev.Client;
 // - The meter list is kept for SevCache.MeterListLifetime.
 // - Usage is kept per meter per day, but only for days before today (Faroese time) that are complete.
 // - Empty answers are never cached: SEV returns them when the rate limit is exceeded.
-// Whatever isn't cached is fetched in a single SevClient call.
+// Whatever isn't cached is fetched in pieces of at most MaxDaysPerRequest days (SEV silently cuts off
+// longer requests), newest first, and at most MaxRequestsPerCall pieces per call so one question can't
+// use up SEV's 10 calls per 5 minutes. What didn't fit is reported in UsageResult.NotFetched; since
+// fetched days are cached, asking again later fills it in.
 public class SevDataService(SevClient sev, SevCache cache)
 {
+    // SEV returns at most 31 days per hourly_kwh_usage call, without saying so (observed 2026-11-21:
+    // a one-year request returned 2025-11-21 to 2025-12-21 only).
+    public const int MaxDaysPerRequest = 31;
+
+    // Leaves room for login, the meter list and other questions within SEV's 10 calls per 5 minutes.
+    public const int MaxRequestsPerCall = 6;
+
     public async Task<IReadOnlyList<Customer>> GetAvailableMetersAsync(CancellationToken cancellationToken = default)
     {
         await cache.Lock.WaitAsync(cancellationToken);
@@ -34,7 +44,7 @@ public class SevDataService(SevClient sev, SevCache cache)
         }
     }
 
-    public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(
+    public async Task<UsageResult> GetHourlyUsageAsync(
         IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
     {
         SevClient.ValidateRange(from, to);
@@ -54,7 +64,8 @@ public class SevDataService(SevClient sev, SevCache cache)
                 select (Meter: meter, Day: day)).ToList();
             var includesToday = to > todayStart;
 
-            var fetched = new Dictionary<int, IReadOnlyList<UsageReading>>();
+            var fetched = new Dictionary<int, List<UsageReading>>();
+            (DateTime From, DateTime To)? notFetched = null;
             if (missing.Count > 0 || includesToday)
             {
                 // Missing past days are fetched as whole days so they can be cached.
@@ -62,28 +73,62 @@ public class SevDataService(SevClient sev, SevCache cache)
                 var fetchTo = includesToday ? to : missing.Max(m => m.Day).AddDays(1).ToDateTime(TimeOnly.MinValue);
                 var fetchMeters = includesToday ? meters : missing.Select(m => m.Meter).Distinct().ToList();
 
-                var usage = await sev.GetHourlyUsageAsync(fetchMeters, fetchFrom, fetchTo, cancellationToken);
-                if (usage.Count == 0)
+                var pieces = PiecesNewestFirst(fetchFrom, fetchTo);
+                var anyAnswer = false;
+                for (var i = 0; i < pieces.Count; i++)
                 {
-                    // Most likely the rate limit; let the caller see the empty answer rather than partial data.
-                    return [];
-                }
-
-                foreach (var meterUsage in usage)
-                {
-                    if (int.TryParse(meterUsage.MeterId, out var meter))
+                    var (pieceFrom, pieceTo) = pieces[i];
+                    if (i >= MaxRequestsPerCall)
                     {
-                        fetched[meter] = meterUsage.Readings;
-                        StoreCompleteDays(meter, meterUsage.Readings, today, fetchFrom, fetchTo);
+                        notFetched = (fetchFrom, pieceTo);
+                        break;
+                    }
+
+                    IReadOnlyList<MeterUsage> usage;
+                    try
+                    {
+                        usage = await sev.GetHourlyUsageAsync(fetchMeters, pieceFrom, pieceTo, cancellationToken);
+                    }
+                    catch (SevRateLimitExceededException) when (anyAnswer)
+                    {
+                        // Keep what was fetched; the rest is reported as not fetched.
+                        notFetched = (fetchFrom, pieceTo);
+                        break;
+                    }
+
+                    if (usage.Count == 0)
+                    {
+                        if (!anyAnswer)
+                        {
+                            // Most likely the rate limit; let the caller see the empty answer rather than partial data.
+                            return new UsageResult([], null);
+                        }
+                        notFetched = (fetchFrom, pieceTo);
+                        break;
+                    }
+
+                    anyAnswer = true;
+                    foreach (var meterUsage in usage)
+                    {
+                        if (int.TryParse(meterUsage.MeterId, out var meter))
+                        {
+                            if (!fetched.TryGetValue(meter, out var list))
+                            {
+                                fetched[meter] = list = [];
+                            }
+                            list.AddRange(meterUsage.Readings);
+                            StoreCompleteDays(meter, meterUsage.Readings, today, pieceFrom, pieceTo);
+                        }
                     }
                 }
             }
 
-            return meters
+            var result = meters
                 .Select(meter => (Meter: meter, Readings: Collect(meter, days, fetched, from, to)))
                 .Where(m => m.Readings is not null)
                 .Select(m => new MeterUsage(m.Meter.ToString(), m.Readings!))
                 .ToList();
+            return new UsageResult(result, notFetched);
         }
         finally
         {
@@ -108,7 +153,7 @@ public class SevDataService(SevClient sev, SevCache cache)
     // Readings for one meter within [from, to): cached days first, fetched data for the rest.
     // Null when there is no data at all for the meter (neither cached nor in SEV's answer).
     private List<UsageReading>? Collect(
-        int meter, IReadOnlyList<DateOnly> days, Dictionary<int, IReadOnlyList<UsageReading>> fetched, DateTime from, DateTime to)
+        int meter, IReadOnlyList<DateOnly> days, Dictionary<int, List<UsageReading>> fetched, DateTime from, DateTime to)
     {
         var hasFetched = fetched.TryGetValue(meter, out var fetchedReadings);
         var anyCached = false;
@@ -142,5 +187,27 @@ public class SevDataService(SevClient sev, SevCache cache)
         return days;
     }
 
+    // Splits [from, to) into pieces of at most MaxDaysPerRequest calendar days, newest first. Boundaries
+    // fall on midnight, so every whole day lies inside one piece and can be cached.
+    private static List<(DateTime From, DateTime To)> PiecesNewestFirst(DateTime from, DateTime to)
+    {
+        var pieces = new List<(DateTime From, DateTime To)>();
+        for (var end = to; end > from;)
+        {
+            var start = end.AddTicks(-1).Date.AddDays(-(MaxDaysPerRequest - 1));
+            if (start < from)
+            {
+                start = from;
+            }
+            pieces.Add((start, end));
+            end = start;
+        }
+        return pieces;
+    }
+
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 }
+
+// Meters holds the readings within the requested range. NotFetched is the oldest part of the range
+// that wasn't fetched in this call (SEV's per-call limits); null when everything was fetched.
+public record UsageResult(IReadOnlyList<MeterUsage> Meters, (DateTime From, DateTime To)? NotFetched);
