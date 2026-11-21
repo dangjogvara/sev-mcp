@@ -1,6 +1,6 @@
 namespace Sev.Client.Models;
 
-public record HourlyUsageRequest(
+internal record UsageRequest(
     IReadOnlyList<int> Meters,
     DateTime FromDate,
     DateTime ToDate

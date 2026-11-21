@@ -11,15 +11,18 @@ public class FakeHttpMessageHandler : HttpMessageHandler
 
     public List<RecordedRequest> Requests { get; } = [];
 
-    public void Respond(string body, HttpStatusCode status = HttpStatusCode.OK, string mediaType = "application/json")
+    // Returns the queued response so a test can add headers to it.
+    public HttpResponseMessage Respond(string body, HttpStatusCode status = HttpStatusCode.OK, string mediaType = "application/json")
     {
-        _responses.Enqueue(new HttpResponseMessage(status)
+        var response = new HttpResponseMessage(status)
         {
             Content = new StringContent(body, Encoding.UTF8, mediaType)
-        });
+        };
+        _responses.Enqueue(response);
+        return response;
     }
 
-    public void RespondWithFixture(string fileName) =>
+    public HttpResponseMessage RespondWithFixture(string fileName) =>
         Respond(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", fileName)));
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
