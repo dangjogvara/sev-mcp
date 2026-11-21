@@ -5,6 +5,7 @@ namespace Sev.Client.Tests;
 public class SevTokenProviderTests
 {
     private readonly FakeHttpMessageHandler _loginHandler = new();
+    private readonly FakeTimeProvider _time = new();
     private readonly SevTokenProvider _tokens;
 
     public SevTokenProviderTests()
@@ -12,7 +13,8 @@ public class SevTokenProviderTests
         _tokens = new SevTokenProvider(
             new HttpClient(_loginHandler) { BaseAddress = SevClient.DefaultBaseAddress },
             "user@example.com",
-            "secret");
+            "secret",
+            _time);
     }
 
     [Fact]
@@ -93,5 +95,84 @@ public class SevTokenProviderTests
         var http = new HttpClient(_loginHandler) { BaseAddress = new Uri("https://api.sev.fo/api/CustomerRESTApi") };
 
         Assert.Throws<ArgumentException>(() => new SevTokenProvider(http, "user", "key"));
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ReusesTokenUntilShortlyBeforeExpiry()
+    {
+        _loginHandler.Respond("first", mediaType: "text/plain");
+
+        await _tokens.GetTokenAsync();
+        _time.Advance(SevTokenProvider.TokenLifetime - SevTokenProvider.RenewalMargin - TimeSpan.FromSeconds(1));
+        var token = await _tokens.GetTokenAsync();
+
+        Assert.Equal("first", token);
+        Assert.Single(_loginHandler.Requests);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_LogsInAgainShortlyBeforeExpiry()
+    {
+        _loginHandler.Respond("first", mediaType: "text/plain");
+        _loginHandler.Respond("second", mediaType: "text/plain");
+
+        await _tokens.GetTokenAsync();
+        _time.Advance(SevTokenProvider.TokenLifetime - SevTokenProvider.RenewalMargin);
+        var renewed = await _tokens.GetTokenAsync();
+        _time.Advance(TimeSpan.FromHours(1));
+        var later = await _tokens.GetTokenAsync();
+
+        Assert.Equal("second", renewed);
+        Assert.Equal("second", later);
+        Assert.Equal(2, _loginHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ConcurrentCallersShareOneRenewal()
+    {
+        _loginHandler.Respond("first", mediaType: "text/plain");
+        await _tokens.GetTokenAsync();
+        _time.Advance(SevTokenProvider.TokenLifetime);
+
+        var gate = new TaskCompletionSource();
+        _loginHandler.Gate = gate.Task;
+        _loginHandler.Respond("second", mediaType: "text/plain");
+        var calls = Enumerable.Range(0, 10).Select(_ => _tokens.GetTokenAsync()).ToList();
+        gate.SetResult();
+        var tokens = await Task.WhenAll(calls);
+
+        Assert.All(tokens, t => Assert.Equal("second", t));
+        Assert.Equal(2, _loginHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Invalidate_NextCallLogsInAgain()
+    {
+        _loginHandler.Respond("first", mediaType: "text/plain");
+        _loginHandler.Respond("second", mediaType: "text/plain");
+
+        var first = await _tokens.GetTokenAsync();
+        _tokens.Invalidate(first);
+        var second = await _tokens.GetTokenAsync();
+
+        Assert.Equal("second", second);
+        Assert.Equal(2, _loginHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Invalidate_OldTokenDoesNotDiscardNewerOne()
+    {
+        _loginHandler.Respond("first", mediaType: "text/plain");
+        _loginHandler.Respond("second", mediaType: "text/plain");
+
+        var first = await _tokens.GetTokenAsync();
+        _tokens.Invalidate(first);
+        await _tokens.GetTokenAsync();
+        // A second request that also failed with the old token must not cause another login.
+        _tokens.Invalidate(first);
+        var token = await _tokens.GetTokenAsync();
+
+        Assert.Equal("second", token);
+        Assert.Equal(2, _loginHandler.Requests.Count);
     }
 }
