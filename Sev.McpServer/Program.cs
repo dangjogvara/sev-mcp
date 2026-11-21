@@ -57,6 +57,18 @@ builder.Services
 
 var app = builder.Build();
 
+// Against DNS rebinding: a web page in the user's browser must not reach this unauthenticated server.
+// AllowedHosts (appsettings.json) rejects foreign Host headers; this rejects cross-site Origin headers.
+app.Use(async (context, next) =>
+{
+    if (!LocalOrigin.IsAllowed(context.Request.Headers.Origin))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next(context);
+});
+
 app.MapMcp("/mcp");
 
 app.Run();
