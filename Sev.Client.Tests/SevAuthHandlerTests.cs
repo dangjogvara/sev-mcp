@@ -43,4 +43,50 @@ public class SevAuthHandlerTests
 
         Assert.Empty(_apiHandler.Requests);
     }
+
+    [Fact]
+    public async Task Unauthorized_LogsInAgainAndRetriesOnce()
+    {
+        _loginHandler.Respond("old", mediaType: "text/plain");
+        _loginHandler.Respond("new", mediaType: "text/plain");
+        _apiHandler.Respond("", System.Net.HttpStatusCode.Unauthorized);
+        _apiHandler.Respond("[]");
+
+        await _client.GetHourlyUsageAsync([1111], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        Assert.Equal(2, _loginHandler.Requests.Count);
+        Assert.Equal(2, _apiHandler.Requests.Count);
+        Assert.Equal("Bearer old", _apiHandler.Requests[0].Authorization);
+        Assert.Equal("Bearer new", _apiHandler.Requests[1].Authorization);
+        // The retry is a copy of the original request, body included.
+        Assert.Equal(_apiHandler.Requests[0].Uri, _apiHandler.Requests[1].Uri);
+        Assert.Equal(_apiHandler.Requests[0].Body, _apiHandler.Requests[1].Body);
+    }
+
+    [Fact]
+    public async Task Unauthorized_Twice_GivesUpAfterOneRetry()
+    {
+        _loginHandler.Respond("old", mediaType: "text/plain");
+        _loginHandler.Respond("new", mediaType: "text/plain");
+        _apiHandler.Respond("", System.Net.HttpStatusCode.Unauthorized);
+        _apiHandler.Respond("still not allowed", System.Net.HttpStatusCode.Unauthorized, "text/plain");
+
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, ex.StatusCode);
+        Assert.Equal(2, _loginHandler.Requests.Count);
+        Assert.Equal(2, _apiHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task OtherErrors_AreNotRetried()
+    {
+        _loginHandler.Respond("eyJtoken", mediaType: "text/plain");
+        _apiHandler.Respond("bad request", System.Net.HttpStatusCode.BadRequest, "text/plain");
+
+        await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Single(_loginHandler.Requests);
+        Assert.Single(_apiHandler.Requests);
+    }
 }
