@@ -137,8 +137,117 @@ public class SevDataServiceTests
         await UsageAsync([1111], Start(Day(-1)), Start(Today));
         var result = await UsageAsync([1111], Start(Day(-1)), Start(Today.AddDays(1)));
 
-        AssertRequest(_handler.Requests[1], [1111], Start(Today), Start(Today.AddDays(1)));
+        // The fake clock is at 12:00, so today is fetched up to then and not to midnight.
+        AssertRequest(_handler.Requests[1], [1111], Start(Today), Start(Today).AddHours(12));
         Assert.Equal(36, result.Single().Readings.Count);
+    }
+
+    // --- Only what can exist is fetched ---
+
+    [Fact]
+    public async Task Usage_FutureRange_DoesNotCallSev()
+    {
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(1)), Start(Day(2)));
+
+        Assert.Empty(_handler.Requests);
+        Assert.Empty(result.Meters);
+        Assert.Null(result.NotFetched);
+        Assert.False(result.EmptyAnswer);
+    }
+
+    [Fact]
+    public async Task Usage_RangeStartingAtCurrentHour_DoesNotCallSev()
+    {
+        // 12:00 to 15:00 today at 12:00: no hour of it has ended yet.
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Today).AddHours(12), Start(Today).AddHours(15));
+
+        Assert.Empty(_handler.Requests);
+        Assert.Empty(result.Meters);
+        Assert.False(result.EmptyAnswer);
+    }
+
+    [Fact]
+    public async Task Usage_DaysBeforeInstallDate_AreNotFetched()
+    {
+        await LoadMetersAsync((1111, Day(-2), null));
+        _handler.Respond(UsageJson((1111, Day(-2), 24), (1111, Day(-1), 24)));
+
+        var first = await UsageAsync([1111], Start(Day(-5)), Start(Today));
+        var second = await UsageAsync([1111], Start(Day(-5)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count); // meter list + one usage call
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-2)), Start(Today));
+        Assert.Equal(48, first.Single().Readings.Count);
+        Assert.Equal(48, second.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_DaysAfterRemovalDate_AreNotFetched()
+    {
+        await LoadMetersAsync((1111, null, Day(-4)));
+        _handler.Respond(UsageJson((1111, Day(-5), 24), (1111, Day(-4), 24)));
+
+        await UsageAsync([1111], Start(Day(-5)), Start(Today));
+        var second = await UsageAsync([1111], Start(Day(-5)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-5)), Start(Day(-3)));
+        Assert.Equal(48, second.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_AllDaysOutsideInstallation_DoesNotCallSev()
+    {
+        await LoadMetersAsync((1111, Day(10), null));
+
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-5)), Start(Today));
+
+        Assert.Single(_handler.Requests); // meter list only
+        Assert.Empty(result.Meters);
+        Assert.False(result.EmptyAnswer);
+    }
+
+    [Fact]
+    public async Task Usage_OldIncompleteDay_IsCachedAsFinal()
+    {
+        var old = Day(-SevCache.DaysUntilFinal);
+        _handler.Respond(UsageJson((1111, old, 20)));
+
+        await UsageAsync([1111], Start(old), Start(old.AddDays(1)));
+        var second = await UsageAsync([1111], Start(old), Start(old.AddDays(1)));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal(20, second.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_OldDaysWithoutData_AreCachedAsEmpty()
+    {
+        // SEV answers for meter 1111 but has nothing for 2222, or for 1111 on the first day.
+        var old = Day(-10);
+        _handler.Respond(UsageJson((1111, old.AddDays(1), 24)));
+
+        await UsageAsync([1111, 2222], Start(old), Start(old.AddDays(2)));
+        var second = await UsageAsync([1111, 2222], Start(old), Start(old.AddDays(2)));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal(["1111", "2222"], second.Select(m => m.MeterId));
+        Assert.Equal(24, second[0].Readings.Count);
+        Assert.Empty(second[1].Readings);
+    }
+
+    [Fact]
+    public async Task Usage_RecentDayWithoutData_IsFetchedAgain()
+    {
+        _handler.Respond(UsageJson((1111, Day(-1), 24)));
+        _handler.Respond(UsageJson((1111, Day(-2), 24)));
+
+        await UsageAsync([1111], Start(Day(-2)), Start(Today));
+        var second = await UsageAsync([1111], Start(Day(-2)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-2)), Start(Day(-1)));
+        Assert.Equal(48, second.Single().Readings.Count);
     }
 
     [Fact]
@@ -156,19 +265,37 @@ public class SevDataServiceTests
     }
 
     [Fact]
-    public async Task Usage_EmptyAnswerIsReturnedAndNotCached()
+    public async Task Usage_EmptyAnswer_ReturnsCachedDaysAndReportsTheRestAsNotFetched()
     {
         _handler.Respond(UsageJson((1111, Day(-3), 24)));
         _handler.Respond("[]");
         _handler.Respond(UsageJson((1111, Day(-2), 24)));
 
         await UsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
-        // Day -3 is cached, but day -2 is missing and SEV answers empty: return nothing rather than half the range.
-        Assert.Empty(await UsageAsync([1111], Start(Day(-3)), Start(Day(-1))));
+        // Day -3 is cached, but day -2 is missing and SEV answers empty (likely throttling).
+        var throttled = await _data.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
         var retry = await UsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
 
+        Assert.True(throttled.EmptyAnswer);
+        Assert.Equal((Start(Day(-2)), Start(Day(-1))), throttled.NotFetched);
+        Assert.Equal(24, throttled.Meters.Single().Readings.Count);
         Assert.Equal(3, _handler.Requests.Count);
         Assert.Equal(48, retry.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_EmptyAnswerWithNothingCached_IsReportedAndNotCached()
+    {
+        _handler.Respond("[]");
+        _handler.Respond(UsageJson((1111, Day(-2), 24)));
+
+        var throttled = await _data.GetHourlyUsageAsync([1111], Start(Day(-2)), Start(Day(-1)));
+        var retry = await UsageAsync([1111], Start(Day(-2)), Start(Day(-1)));
+
+        Assert.True(throttled.EmptyAnswer);
+        Assert.Empty(throttled.Meters);
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.Equal(24, retry.Single().Readings.Count);
     }
 
     [Fact]
@@ -272,13 +399,13 @@ public class SevDataServiceTests
     [Fact]
     public async Task Usage_RangeIntoToday_PiecesEndOnMidnight()
     {
-        // 40 days ending at 15:00 today: the newest piece is 30 whole days plus today's part.
+        // 40 days ending at 10:00 today: the newest piece is 30 whole days plus today's part.
         _handler.Respond(UsageJson(DaysOf(1111, Day(-30), 30)));
         _handler.Respond(UsageJson(DaysOf(1111, Day(-40), 10)));
 
-        await _data.GetHourlyUsageAsync([1111], Start(Day(-40)), Start(Today).AddHours(15));
+        await _data.GetHourlyUsageAsync([1111], Start(Day(-40)), Start(Today).AddHours(10));
 
-        AssertRequest(_handler.Requests[0], [1111], Start(Day(-30)), Start(Today).AddHours(15));
+        AssertRequest(_handler.Requests[0], [1111], Start(Day(-30)), Start(Today).AddHours(10));
         AssertRequest(_handler.Requests[1], [1111], Start(Day(-40)), Start(Day(-30)));
     }
 
@@ -289,6 +416,42 @@ public class SevDataServiceTests
     // (meter, day, 24) for `count` days from `first`.
     private static (int Meter, DateOnly Day, int Hours)[] DaysOf(int meter, DateOnly first, int count) =>
         Enumerable.Range(0, count).Select(d => (meter, first.AddDays(d), 24)).ToArray();
+
+    // Puts a meter list with these install and removal dates in the cache (costs one recorded request).
+    private async Task LoadMetersAsync(params (int Meter, DateOnly? Installed, DateOnly? Removed)[] meters)
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                customer_name = "Test Customer",
+                installations = new[]
+                {
+                    new
+                    {
+                        move_in_date = "2019-06-01T00:00:00",
+                        inst_id = 10001,
+                        address = "Testgøta 1",
+                        postal_code = "100",
+                        postal_district = "Tórshavn",
+                        tarif_number = 310,
+                        billing_type = "OS",
+                        meters = meters.Select(m => new
+                        {
+                            meter_id = m.Meter,
+                            serial_number = "11111111",
+                            meter_name = "E350",
+                            meter_type = "E-01",
+                            install_date = m.Installed?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                            removal_date = m.Removed?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        }),
+                    },
+                },
+            },
+        });
+        _handler.Respond(json);
+        await _data.GetAvailableMetersAsync();
+    }
 
     private static DateOnly Day(int offsetFromToday) => Today.AddDays(offsetFromToday);
 

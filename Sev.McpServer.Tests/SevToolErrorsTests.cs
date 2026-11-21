@@ -1,6 +1,7 @@
 using System.Net;
 using ModelContextProtocol;
 using Sev.Client;
+using Sev.Client.Models;
 using Sev.McpServer.Tools;
 
 namespace Sev.McpServer.Tests;
@@ -73,6 +74,33 @@ public class SevToolErrorsTests
         var ex = Assert.Throws<McpException>(() => SevToolErrors.ThrowIfEmpty(Array.Empty<int>()));
 
         Assert.Contains("rate limit", ex.Message);
+    }
+
+    [Fact]
+    public void ThrowIfEmptyAnswer_EmptyAnswerWithoutCachedData_MentionsRateLimit()
+    {
+        var result = new UsageResult([new MeterUsage("1111", [])], (new DateTime(2026, 11, 1), new DateTime(2026, 11, 2)), EmptyAnswer: true);
+
+        var ex = Assert.Throws<McpException>(() => SevToolErrors.ThrowIfEmptyAnswer(result));
+
+        Assert.Contains("rate limit", ex.Message);
+    }
+
+    [Fact]
+    public void ThrowIfEmptyAnswer_EmptyAnswerWithCachedData_ReturnsIt()
+    {
+        var reading = new UsageReading(new DateTime(2026, 11, 1), 1.0m, null, "kWh");
+        var result = new UsageResult([new MeterUsage("1111", [reading])], (new DateTime(2026, 11, 2), new DateTime(2026, 11, 3)), EmptyAnswer: true);
+
+        Assert.Same(result, SevToolErrors.ThrowIfEmptyAnswer(result));
+    }
+
+    [Fact]
+    public void ThrowIfEmptyAnswer_NothingToFetch_IsNotAnError()
+    {
+        var result = new UsageResult([], null);
+
+        Assert.Same(result, SevToolErrors.ThrowIfEmptyAnswer(result));
     }
 
     [Fact]

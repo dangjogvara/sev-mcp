@@ -44,10 +44,8 @@ public class UsageTools(SevDataService sev)
             var available = SevToolErrors.ThrowIfEmpty(MeterTools.Summarize(await sev.GetAvailableMetersAsync(cancellationToken)));
             var selected = ResolveMeters(available, meters);
 
-            var result = await sev.GetHourlyUsageAsync(selected.Select(m => m.MeterId).ToList(), fromTime, toTime, cancellationToken);
-
-            // Check SEV's own answer for emptiness (likely throttling) before meters without data are added.
-            SevToolErrors.ThrowIfEmpty(result.Meters);
+            var result = SevToolErrors.ThrowIfEmptyAnswer(
+                await sev.GetHourlyUsageAsync(selected.Select(m => m.MeterId).ToList(), fromTime, toTime, cancellationToken));
             return Summarize(selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched);
         });
     }

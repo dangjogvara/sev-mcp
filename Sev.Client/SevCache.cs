@@ -13,6 +13,12 @@ public class SevCache(TimeProvider? timeProvider = null)
     // finished delivering isn't kept half-empty. 23 allows for the short day when summer time starts.
     public const int MinReadingsForCompleteDay = 23;
 
+    // A day this many days before today (or earlier) is cached as SEV answered it, even with fewer readings
+    // or none: SEV won't add to it any more, and refetching gaps (an outage, days before a meter was installed)
+    // on every call would waste rate-limited calls. More recent incomplete days are fetched again, since some
+    // meters deliver a day at a time.
+    public const int DaysUntilFinal = 7;
+
     internal TimeProvider Time { get; } = timeProvider ?? TimeProvider.System;
 
     // Held while checking the cache and fetching, so concurrent tool calls don't fetch the same data twice.
