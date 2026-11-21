@@ -14,7 +14,8 @@ public class MeterTools(SevClient sev)
         "Use the meterId values with the usage tools. Each call uses one of the SEV API's 10 calls per 5 minutes, " +
         "so call this once per conversation and reuse the result.")]
     public Task<IReadOnlyList<MeterSummary>> ListMetersAsync(CancellationToken cancellationToken) =>
-        SevToolErrors.CallAsync(async () => Summarize(await sev.GetAvailableMetersAsync(cancellationToken)));
+        SevToolErrors.CallAsync(async () =>
+            SevToolErrors.ThrowIfEmpty(Summarize(await sev.GetAvailableMetersAsync(cancellationToken))));
 
     // Flattens SEV's customer → installation → meter hierarchy into one row per meter.
     public static IReadOnlyList<MeterSummary> Summarize(IReadOnlyList<Customer> customers) =>

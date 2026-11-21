@@ -58,4 +58,20 @@ public class SevToolErrorsTests
 
         Assert.Contains("a few minutes", message);
     }
+
+    [Fact]
+    public void ThrowIfEmpty_ReturnsNonEmptyList()
+    {
+        int[] result = [1];
+
+        Assert.Same(result, SevToolErrors.ThrowIfEmpty(result));
+    }
+
+    [Fact]
+    public void ThrowIfEmpty_EmptyList_MentionsRateLimit()
+    {
+        var ex = Assert.Throws<McpException>(() => SevToolErrors.ThrowIfEmpty(Array.Empty<int>()));
+
+        Assert.Contains("rate limit", ex.Message);
+    }
 }
