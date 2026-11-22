@@ -38,6 +38,11 @@ if (heatPump)
 
 var app = builder.Build();
 app.MapMcpEndpoint(auth);
+
+// For App Service's Always On (which pings "/") and Health check ("/health"): they answer 200 without a login,
+// and without calling SEV or myUplink, so they never use up a rate limit.
+app.MapGet("/health", () => "ok");
+app.MapGet("/", () => "SEV MCP. Connect an MCP client to /mcp.");
 app.Run();
 
 // Lets the integration tests start the server with WebApplicationFactory<Program>.

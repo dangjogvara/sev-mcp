@@ -93,6 +93,8 @@ fi
 # Always On keeps the one instance (and with it the cache and rate-limit count) running.
 az webapp config set -g "$RESOURCE_GROUP" -n "$APP" --always-on true --min-tls-version 1.2 \
   --ftps-state Disabled --startup-file "dotnet Sev.McpServer.dll" -o none
+# Health check pings /health every minute; an instance that stays unhealthy for an hour is replaced.
+az webapp config set -g "$RESOURCE_GROUP" -n "$APP" --generic-configurations '{"healthCheckPath": "/health"}' -o none
 HOST="$(az webapp show -g "$RESOURCE_GROUP" -n "$APP" --query defaultHostName -o tsv)"
 RESOURCE="https://$HOST/mcp"
 echo "MCP URL: $RESOURCE"
@@ -214,8 +216,16 @@ retry az role assignment create --assignee-object-id "$DEPLOY_PRINCIPAL_ID" \
 step "GitHub environment 'production' (main only), secrets and variable"
 echo '{"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}' \
   | gh api -X PUT "repos/$GITHUB_REPO/environments/production" --input - >/dev/null
-gh api "repos/$GITHUB_REPO/environments/production/deployment-branch-policies" \
-  -f name=main -f type=branch >/dev/null 2>&1 || true   # already there on a second run
+# Only main may deploy. Created once; any error other than "already there" stops the script, since
+# without the policy any branch could deploy.
+POLICIES="$(gh api "repos/$GITHUB_REPO/environments/production/deployment-branch-policies" \
+  --jq '[.branch_policies[] | select(.type == "branch") | .name] | join(" ")')" \
+  || fail "Couldn't read the deployment branch policies of the 'production' environment."
+if [[ " $POLICIES " != *" main "* ]]; then
+  gh api "repos/$GITHUB_REPO/environments/production/deployment-branch-policies" -f name=main -f type=branch >/dev/null \
+    || fail "Couldn't limit the 'production' environment to the main branch."
+fi
+echo "Deploys only from: main"
 gh secret set AZURE_CLIENT_ID --env production --repo "$GITHUB_REPO" --body "$DEPLOY_CLIENT_ID"
 gh secret set AZURE_TENANT_ID --env production --repo "$GITHUB_REPO" --body "$TENANT_ID"
 gh secret set AZURE_SUBSCRIPTION_ID --env production --repo "$GITHUB_REPO" --body "$SUBSCRIPTION_ID"

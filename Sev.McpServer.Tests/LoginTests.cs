@@ -148,6 +148,20 @@ public class LoginTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(crossSite)).StatusCode);
     }
 
+    [Theory]
+    [InlineData(true, "/health", "ok")]
+    [InlineData(true, "/", "SEV MCP")]
+    [InlineData(false, "/health", "ok")]
+    public async Task HealthAndRoot_AnswerWithoutToken(bool withAuth, string path, string expected)
+    {
+        using var factory = Server(withAuth);
+
+        var response = await factory.CreateClient().GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains(expected, await response.Content.ReadAsStringAsync());
+    }
+
     [Fact]
     public void WithoutAuthOutsideDevelopment_RefusesToStart()
     {

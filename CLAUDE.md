@@ -65,6 +65,8 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 - Tools live in `Tools/` and are registered with `WithTools<T>(toolJsonOptions)` (relaxed escaping keeps æ/ø/á readable). Tools take `SevDataService`, never `SevClient` directly.
 - Only an `McpException`'s message reaches Claude (other exceptions become a generic error), so tools wrap calls in `SevToolErrors.CallAsync` / `HeatPumpToolErrors.CallAsync` and throw `McpException` for invalid arguments.
 - Keep tool logic in static methods so `Sev.McpServer.Tests` can test it without HTTP.
+- `GET /health` and `GET /` answer 200 without a login and without calling SEV or myUplink, for App Service's Health check and Always On (`Program.cs`).
+- The server must run as **one instance**: the rate-limit count, tokens, MCP sessions and the cache live in memory, and the cache and heat pump log files in the shared `/home` would be written by every instance. `docs/deploy-azure.md` explains this.
 - `Periods` holds what all period-based tools share: `Granularity`, the argument checks (`ParseRange`, `ParseGranularity`, `MaxRange`), `Key` (the period a time falls in) and `ExpectedHours` (the ended local hours in a range, skipping the hour summer time skips).
 
 ### Usage, cost and CO2 tools
@@ -141,6 +143,7 @@ Optional: registered only when `MyUplinkServices.AddMyUplinkIfConfigured` finds 
   - It creates the App Service (Linux B1, .NET 10, Always On, startup `dotnet Sev.McpServer.dll`), the Entra app registration Claude logs in with (v2 tokens, `mcp.access` scope, the MCP URL as an Application ID URI, Claude's callback), the app settings, and a deploy identity with a federated credential for the `production` environment.
   - The credential's subject is read from GitHub (`/actions/oidc/customization/sub`): this repo uses immutable, ID-based subjects (`repo:<owner>@<id>/<repo>@<id>:...`), not `repo:<owner>/<repo>:...`.
   - An existing resource group is reused wherever it is, and the plan is created in `LOCATION`, so a quota error can be fixed by running again in another region.
+  - It sets App Service's Health check path to `/health`, and limits the `production` environment to `main`, failing loudly if GitHub refuses (it used to ignore errors there).
 - `deploy/setup-backup.sh` (run at the end of the setup script, or alone with the same `RESOURCE_GROUP` / `LOCATION` / `APP`) creates a storage account in its own resource group `<group>-backup` (so deleting the app's group keeps the backups) and an App Service custom backup every day kept 30 days, including `/home` and so the heat pump log.
   - It registers `Microsoft.Storage` first (a new subscription answers `SubscriptionNotFound` otherwise).
   - Backups write through a container SAS valid 2 years; rerun the script before it expires. A new schedule starts with a backup straight away.
