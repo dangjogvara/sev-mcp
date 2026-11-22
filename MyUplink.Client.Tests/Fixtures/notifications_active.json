@@ -1,0 +1,19 @@
+{
+  "page": 1,
+  "itemsPerPage": 100,
+  "numItems": 1,
+  "notifications": [
+    {
+      "id": "00000000-0000-0000-0000-0000000000aa",
+      "alarmNumber": 15,
+      "deviceId": "TEST000000000001",
+      "severity": 1,
+      "status": 1,
+      "createdDatetime": "2026-11-21T08:15:00Z",
+      "statusHistory": [],
+      "header": "Low flow",
+      "description": "Check the heating circuit.",
+      "equipName": "Heat pump 1"
+    }
+  ]
+}

@@ -4,6 +4,8 @@ An [MCP](https://modelcontextprotocol.io) server that lets Claude (or any other 
 
 Ask things like *"How much electricity did we use last month?"* or *"Which day this week used the most?"* and Claude fetches the numbers for you.
 
+Optionally, it also reads your heat pump's current state through [myUplink](https://myuplink.com) (NIBE, CTC and other brands), so you can ask *"How is the heat pump doing?"*.
+
 This is an unofficial, personal project. It isn't made or endorsed by SEV.
 
 ## What it offers
@@ -18,6 +20,12 @@ This is an unofficial, personal project. It isn't made or endorsed by SEV.
 `get_usage`, `get_cost` and `get_co2` take `from` and `to` (a date like `2026-10-10`, or a date and time like `2026-10-10T06:00`, in Faroese local time; `to` is not included) and `granularity` (`hour`, `day` or `month`). A call can cover at most 31 days by hour, 366 days by day, or 731 days by month.
 
 Missing data is never shown as zero. When SEV has no reading for some hours, the result says how many are missing, and the total is `null` if there are no readings at all.
+
+Optional, only when myUplink is configured (see below):
+
+| Tool | What it does |
+|---|---|
+| `get_heatpump_status` | The heat pump's current state: outdoor, heating and hot water temperatures, what it's doing, compressor speed, settings such as setpoints, and active alarms. Current values only, read-only. |
 
 ## Getting started
 
@@ -47,6 +55,17 @@ claude mcp add --transport http sev http://localhost:5133/mcp
 
 Outside development (where user-secrets aren't loaded), set the environment variables `Sev__User` and `Sev__Key` instead. The server refuses to start without them.
 
+### Optional: heat pump (myUplink)
+
+If your heat pump reports to myUplink, register an application at [dev.myuplink.com](https://dev.myuplink.com) with your myUplink account and add its client ID and secret:
+
+```bash
+dotnet user-secrets set "MyUplink:ClientId" "<client id>" --project Sev.McpServer
+dotnet user-secrets set "MyUplink:ClientSecret" "<client secret>" --project Sev.McpServer
+```
+
+Hosted, use the environment variables `MyUplink__ClientId` and `MyUplink__ClientSecret`. Without them there's no `get_heatpump_status` tool and nothing else changes. The server only reads (scope `READSYSTEM`), and myUplink allows 25 calls per minute. myUplink's history endpoints refused access in testing, so only current values are available.
+
 ## Working within SEV's limits
 
 SEV's API has a few limits that shape how this server works:
@@ -75,6 +94,7 @@ Settings for the hosted mode, as environment variables:
 | `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
 | `Sev__CacheDirectory` | `/home/data/sev-cache` | Where the cache is saved so it survives restarts. Optional. |
+| `MyUplink__ClientId`, `MyUplink__ClientSecret` | `<from dev.myuplink.com>` | Turns on the heat pump tool. Optional. |
 
 [docs/deploy-azure.md](docs/deploy-azure.md) explains how to host it on Azure App Service. A setup script creates the Entra app registration and these settings, and GitHub Actions deploys `main`.
 
@@ -83,8 +103,9 @@ Settings for the hosted mode, as environment variables:
 | Project | Purpose |
 |---|---|
 | `Sev.Client` | Class library for SEV's API: the client, login and token handling, rate limiting, and the cache. |
-| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage`, `get_cost` and `get_co2` tools. |
-| `Sev.Client.Tests`, `Sev.McpServer.Tests` | xUnit tests. They never call the real API. |
+| `MyUplink.Client` | Class library for myUplink's API (heat pumps): login and reading systems, current values and alarms. |
+| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage`, `get_cost` and `get_co2` tools, and `get_heatpump_status` when myUplink is configured. |
+| `Sev.Client.Tests`, `MyUplink.Client.Tests`, `Sev.McpServer.Tests` | xUnit tests. They never call the real APIs. |
 | `Sev.SmokeTest` | A small console app that logs in and prints meters and one day of usage from the live API. |
 
 SEV provides an API reference document to its API customers. An [OpenAPI description](https://github.com/dragan-norliga/sev-rest-clients/blob/master/DotNetExampleClient/api/openapi.yaml) of the API is also available. [CLAUDE.md](CLAUDE.md) has more detail on the design and on what has been learned about the API's behaviour.

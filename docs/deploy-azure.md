@@ -46,6 +46,7 @@ What it does:
    - `Auth__AllowedUsers__0`: your own Entra object ID, so only you get in
    - `AllowedHosts`
    - `Sev__CacheDirectory`: `/home/data/sev-cache`, where the cache is saved. `/home` survives restarts and deploys, so cached days don't have to be fetched from SEV again.
+   - `MyUplink__ClientId` and `MyUplink__ClientSecret`, only if `MYUPLINK_CLIENT_ID` and `MYUPLINK_CLIENT_SECRET` are in `.env`: they turn on the optional heat pump tool.
 5. Creates the deploy identity `sev-mcp-deploy`. It can only deploy to this web app, and only trusts GitHub jobs in this repository's `production` environment.
 6. Creates that GitHub environment (limited to `main`), its secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, and the repository variable `AZURE_WEBAPP_NAME`. The deploy job runs only once this variable exists.
 

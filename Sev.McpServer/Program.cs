@@ -23,11 +23,18 @@ var toolJsonOptions = new JsonSerializerOptions(McpJsonUtilities.DefaultOptions)
     Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
 };
 
-builder.Services
+// Optional: heat pump status from myUplink, only when the MyUplink section is configured. See MyUplinkServices.
+var heatPump = builder.AddMyUplinkIfConfigured();
+
+var mcp = builder.Services
     .AddMcpServer()
     .WithHttpTransport()
     .WithTools<MeterTools>(toolJsonOptions)
     .WithTools<UsageTools>(toolJsonOptions);
+if (heatPump)
+{
+    mcp.WithTools<HeatPumpTools>(toolJsonOptions);
+}
 
 var app = builder.Build();
 app.MapMcpEndpoint(auth);

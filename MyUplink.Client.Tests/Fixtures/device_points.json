@@ -1,0 +1,337 @@
+[
+  {
+    "category": "Hot water",
+    "parameterId": "61500",
+    "parameterName": "Hot water mode",
+    "parameterUnit": "",
+    "writable": true,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 1.0,
+    "strVal": "Normal",
+    "smartHomeCategories": [],
+    "minValue": 0.0,
+    "maxValue": 2.0,
+    "stepValue": 1.0,
+    "enumValues": [
+      {
+        "value": "0",
+        "text": "Economy",
+        "icon": null
+      },
+      {
+        "value": "1",
+        "text": "Normal",
+        "icon": null
+      },
+      {
+        "value": "2",
+        "text": "Comfort",
+        "icon": null
+      }
+    ],
+    "scaleValue": "1",
+    "zoneId": null
+  },
+  {
+    "category": "Hot water",
+    "parameterId": "61502",
+    "parameterName": "Hot water setpoint",
+    "parameterUnit": "°C",
+    "writable": true,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 50.0,
+    "strVal": "50°C",
+    "smartHomeCategories": [],
+    "minValue": 380.0,
+    "maxValue": 650.0,
+    "stepValue": 10.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "General",
+    "parameterId": "62000",
+    "parameterName": "Outdoor Temperature",
+    "parameterUnit": "°C",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 3.5,
+    "strVal": "3.5°C",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "Text not found: id[], fw[CTC-01-01], lang[en-GB]",
+    "parameterId": "62002",
+    "parameterName": "Text not found: id[], fw[CTC-01-01], lang[en-GB]",
+    "parameterUnit": "",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 0.0,
+    "strVal": "0",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0",
+    "zoneId": null
+  },
+  {
+    "category": "Hot water",
+    "parameterId": "62003",
+    "parameterName": "Hot water flow temp",
+    "parameterUnit": "°C",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": -32768.0,
+    "strVal": "-32768°C",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "General",
+    "parameterId": "62005",
+    "parameterName": "Status",
+    "parameterUnit": "",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 4.0,
+    "strVal": "HC",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [
+      {
+        "value": "0",
+        "text": "HP upper",
+        "icon": null
+      },
+      {
+        "value": "1",
+        "text": "HP lower",
+        "icon": null
+      },
+      {
+        "value": "2",
+        "text": "Add. heat",
+        "icon": null
+      },
+      {
+        "value": "3",
+        "text": "HP + Add. heat",
+        "icon": null
+      },
+      {
+        "value": "4",
+        "text": "HC",
+        "icon": null
+      },
+      {
+        "value": "5",
+        "text": "DHW",
+        "icon": null
+      },
+      {
+        "value": "6",
+        "text": "Pool",
+        "icon": null
+      },
+      {
+        "value": "7",
+        "text": "Off",
+        "icon": null
+      },
+      {
+        "value": "8",
+        "text": "HC mixing",
+        "icon": null
+      },
+      {
+        "value": "9",
+        "text": "Wood",
+        "icon": null
+      },
+      {
+        "value": "10",
+        "text": "DHW/HC",
+        "icon": null
+      },
+      {
+        "value": "11",
+        "text": "Cooling",
+        "icon": null
+      },
+      {
+        "value": "12",
+        "text": "Swap",
+        "icon": null
+      }
+    ],
+    "scaleValue": "1",
+    "zoneId": null
+  },
+  {
+    "category": "Heating circuit 1",
+    "parameterId": "62011",
+    "parameterName": "Primary flow temp",
+    "parameterUnit": "°C",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 41.0,
+    "strVal": "41°C",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "Heat pump 1",
+    "parameterId": "62017",
+    "parameterName": "Status",
+    "parameterUnit": "",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 3.0,
+    "strVal": "On",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [
+      {
+        "value": "0",
+        "text": "Off, start delay",
+        "icon": null
+      },
+      {
+        "value": "1",
+        "text": "Off, ready to start",
+        "icon": null
+      },
+      {
+        "value": "2",
+        "text": "Wait until flow",
+        "icon": null
+      },
+      {
+        "value": "3",
+        "text": "On",
+        "icon": null
+      },
+      {
+        "value": "4",
+        "text": "Defrost",
+        "icon": null
+      },
+      {
+        "value": "5",
+        "text": "Cooling",
+        "icon": null
+      },
+      {
+        "value": "6",
+        "text": "Blocked",
+        "icon": null
+      },
+      {
+        "value": "7",
+        "text": "Off, alarm",
+        "icon": null
+      },
+      {
+        "value": "8",
+        "text": "Function test",
+        "icon": null
+      },
+      {
+        "value": "30",
+        "text": "Not defined",
+        "icon": null
+      },
+      {
+        "value": "31",
+        "text": "Comp. disabled",
+        "icon": null
+      },
+      {
+        "value": "32",
+        "text": "Comm. error",
+        "icon": null
+      },
+      {
+        "value": "33",
+        "text": "Hot water",
+        "icon": null
+      }
+    ],
+    "scaleValue": "1",
+    "zoneId": null
+  },
+  {
+    "category": "Add. heat",
+    "parameterId": "62168",
+    "parameterName": "Electric power kW",
+    "parameterUnit": "",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 0.0,
+    "strVal": "0",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "Heat pump 1",
+    "parameterId": "62193",
+    "parameterName": "RPS",
+    "parameterUnit": "",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 42.0,
+    "strVal": "42",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  },
+  {
+    "category": "Hot water",
+    "parameterId": "62276",
+    "parameterName": "Hot water tank temp",
+    "parameterUnit": "°C",
+    "writable": false,
+    "timestamp": "2026-11-21T10:00:00+00:00",
+    "value": 52.0,
+    "strVal": "52°C",
+    "smartHomeCategories": [],
+    "minValue": null,
+    "maxValue": null,
+    "stepValue": 1.0,
+    "enumValues": [],
+    "scaleValue": "0.1",
+    "zoneId": null
+  }
+]
