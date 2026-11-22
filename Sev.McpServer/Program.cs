@@ -8,6 +8,10 @@ using Sev.McpServer.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Fail at startup rather than on the first tool call if the system has no time-zone database
+// (SevTime.Zone needs Atlantic/Faroe; slim container images lack it until tzdata is installed).
+_ = SevTime.Zone;
+
 // Login: required when the Auth section is configured (hosted), and the server refuses to run unprotected
 // outside Development. Locally, without it, only same-machine use is allowed (see below).
 var auth = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
