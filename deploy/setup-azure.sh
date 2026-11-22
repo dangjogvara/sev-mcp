@@ -18,7 +18,8 @@ SKU="${SKU:-B1}"
 APP="${APP:-sev-mcp}"
 ENTRA_APP_NAME="${ENTRA_APP_NAME:-SEV MCP}"
 DEPLOY_IDENTITY="${DEPLOY_IDENTITY:-sev-mcp-deploy}"
-GITHUB_REPO="${GITHUB_REPO:-dangjogvara/sev-mcp}"
+# The GitHub repository that deploys: by default the one this checkout came from (your fork).
+GITHUB_REPO="${GITHUB_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')}"
 CLAUDE_CALLBACK="https://claude.ai/api/mcp/auth_callback"
 SCOPE_NAME="mcp.access"
 
@@ -41,6 +42,9 @@ for tool in az gh python3; do
 done
 az account show -o none 2>/dev/null || fail "Not logged in to Azure: run 'az login'."
 gh auth status >/dev/null 2>&1 || fail "Not logged in to GitHub: run 'gh auth login'."
+[[ "$GITHUB_REPO" =~ ^[^/[:space:]]+/[^/[:space:]]+$ ]] \
+  || fail "Couldn't tell which GitHub repository deploys (from 'git remote get-url origin'). Set GITHUB_REPO=<owner>/<repo>."
+gh repo view "$GITHUB_REPO" --json name >/dev/null 2>&1 || fail "GitHub repository '$GITHUB_REPO' not found or not accessible."
 
 # SEV credentials (and optionally myUplink's, for the heat pump tools): from the environment, or from .env
 # like the smoke test.
@@ -59,6 +63,7 @@ TENANT_ID="$(az account show --query tenantId -o tsv)"
 USER_OID="$(az ad signed-in-user show --query id -o tsv)"
 echo "Subscription: $(az account show --query name -o tsv)"
 echo "You (allowed user): $(az ad signed-in-user show --query userPrincipalName -o tsv)"
+echo "GitHub repository: $GITHUB_REPO"
 
 # --- App Service ---------------------------------------------------------------------------
 

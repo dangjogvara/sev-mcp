@@ -10,9 +10,11 @@ How it fits together:
 
 ## 1. Before you start
 
+- Your own copy of this repository: fork it on GitHub, turn on Actions in the fork (its Actions tab), and clone the fork. The script deploys from the checkout's `origin`; set `GITHUB_REPO=<owner>/<repo>` to pick another repository.
 - An Azure subscription. The App Service plan (B1) costs roughly 13 USD a month. Everything else used here is free.
 - The [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (`az login`) and the [GitHub CLI](https://cli.github.com/) (`gh auth login`), logged in as yourself.
-- `SEV_USER` and `SEV_KEY` in `.env`, as for the smoke test.
+- `SEV_USER` and `SEV_KEY` in `.env`, as for the smoke test. Optionally `MYUPLINK_CLIENT_ID` and `MYUPLINK_CLIENT_SECRET` too, for the heat pump tools.
+- A free-trial subscription works, but it stops when the trial ends: upgrade to pay-as-you-go to keep the server running.
 
 ## 2. Run the setup script
 
@@ -77,6 +79,13 @@ In Claude (web or desktop app): **Settings > Connectors > Add custom connector**
 - **OAuth client:** use your own, and enter the client ID and client secret from the script
 
 When you connect, Claude opens Microsoft's sign-in page. Sign in with the account you ran the script with, and accept the "Use SEV MCP" permission. The connector then works in the Claude mobile app too.
+
+## Keeping it up to date
+
+- **New versions:** on GitHub, press **Sync fork** on your fork (or merge from this repository). The push to `main` runs the tests and deploys.
+- **New tools:** Claude keeps the list of tools from when the connector was connected. After an update that adds tools, open **Settings > Connectors**, disconnect the connector and connect it again, then start a new chat.
+- **New settings:** if an update adds settings, run the setup script again with the same `RESOURCE_GROUP`, `LOCATION` and `APP`. It reuses everything and doesn't create a new client secret.
+- **Package updates:** Dependabot opens PRs for new package versions in this repository, and syncing your fork brings them in. In a fork Dependabot may be off; turn it on under Settings > Code security if you want its PRs there too.
 
 ## Troubleshooting
 

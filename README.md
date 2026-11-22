@@ -8,6 +8,8 @@ Optionally, it also reads your heat pump's current state through [myUplink](http
 
 This is an unofficial, personal project. It isn't made or endorsed by SEV.
 
+There's no shared service to sign up for: everyone runs their own copy with their own SEV account, on their own computer or in their own Azure subscription, so your data never passes through anyone else's server. See [Ways to run it](#ways-to-run-it).
+
 ## What it offers
 
 | Tool | What it does |
@@ -28,12 +30,21 @@ Optional, only when myUplink is configured (see below):
 | `get_heatpump_status` | The heat pump's current state: outdoor, heating and hot water temperatures, what it's doing, compressor speed, settings such as setpoints, and active alarms. Read-only. |
 | `get_heatpump_history` | Past readings (outdoor temperature by default, or any other measurement) per hour, day or month, from the server's own hourly log. Takes the same `from`, `to` and `granularity` as `get_usage`, so it lines up with electricity use. |
 
-## Getting started
+## Ways to run it
 
-You need:
+| | [Locally](#run-it-locally) | [Hosted on Azure](#host-your-own-on-azure) |
+|---|---|---|
+| Use it from | Claude Code on your computer | Claude on the web, desktop and phone |
+| Runs | on your computer, while it's on | in your own Azure App Service, all the time |
+| Login | none: only your computer can reach it | Microsoft Entra ID, only you (and people you allow) |
+| Heat pump history | logged while the server runs | logged every hour around the clock |
+| Cost | free | about 13 USD a month |
 
-- the [.NET 10 SDK](https://dotnet.microsoft.com/download)
-- access to SEV's customer REST API: a user name and an API key
+Both need your own access to SEV's customer REST API: a user name and an API key, which you get from SEV.
+
+## Run it locally
+
+You need the [.NET 10 SDK](https://dotnet.microsoft.com/download) and your SEV API user name and key.
 
 Store your credentials with .NET user-secrets, so they stay out of the repository:
 
@@ -68,6 +79,40 @@ dotnet user-secrets set "MyUplink:ClientSecret" "<client secret>" --project Sev.
 Hosted, use the environment variables `MyUplink__ClientId` and `MyUplink__ClientSecret`. Without them there's no `get_heatpump_status` tool and nothing else changes. The server only reads (scope `READSYSTEM`), and myUplink allows 25 calls per minute.
 
 myUplink doesn't give its history to apps (its history endpoints answered 403 with either kind of login), so the server logs the heat pump's measurements itself once an hour, about 2 myUplink calls each time. `get_heatpump_history` reads that log, so it only goes back to when logging started. With `Sev__CacheDirectory` set, the log is kept there (`HeatPumpLog-<year>-<month>.json`) and survives restarts; otherwise it's lost when the server stops. Set `MyUplink__LogHourly` to `false` to turn logging off.
+
+## Host your own on Azure
+
+To use it from the Claude apps on the web and your phone, host your own copy on Azure App Service. A setup script does nearly all of it; [docs/deploy-azure.md](docs/deploy-azure.md) has the details and troubleshooting.
+
+You need:
+
+- your SEV API user name and key
+- an Azure subscription. A new or free-trial subscription may have no quota for the B1 plan in some regions; the script says what to do (request quota, or pick another region with `LOCATION=`). A free trial stops when it ends, so upgrade to pay-as-you-go to keep the server running.
+- a GitHub account, the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) and the [GitHub CLI](https://cli.github.com/)
+- optionally, a myUplink application for the heat pump tools (see [above](#optional-heat-pump-myuplink))
+
+Steps:
+
+1. **Fork** this repository on GitHub, and turn on Actions in your fork (its Actions tab), so it can deploy.
+2. **Clone your fork** and put your credentials in a `.env` file in it (gitignored): `SEV_USER` and `SEV_KEY`, and optionally `MYUPLINK_CLIENT_ID` and `MYUPLINK_CLIENT_SECRET`.
+3. **Run the setup script** after `az login` and `gh auth login`:
+   ```bash
+   ./deploy/setup-azure.sh
+   ```
+   It creates the web app, a Microsoft Entra login that only lets you in, a deploy identity that only trusts GitHub Actions in your fork, and daily backups. At the end it prints the MCP URL, a client ID and a client secret (shown once).
+4. **Deploy:**
+   ```bash
+   gh workflow run ci.yml --ref main
+   ```
+5. **Connect Claude:** Settings > Connectors > Add custom connector, with the MCP URL, and under the OAuth settings the client ID and secret. Sign in with the same Microsoft account.
+
+Good to know:
+
+- **Your data stays yours.** Your credentials are app settings in your Azure subscription, and your usage and heat pump data are cached in your App Service and backed up to your own storage account. The server only talks to SEV, myUplink and your Claude.
+- **Keep secrets out of the repository.** A fork of a public repository is public: never commit `.env`, and don't paste keys or client secrets into issues or chats.
+- **Costs:** about 13 USD a month for the B1 plan, plus a few cents for backups. A budget alert (Cost Management > Budgets) warns you if anything unexpected costs money.
+- **Updates:** press **Sync fork** on GitHub; the new commits on `main` are tested and deployed automatically. If an update adds tools, disconnect and reconnect the connector in Claude so it sees them; if it adds settings, run the setup script again (it's safe to rerun).
+- **Your household** can use your server too, with your data: invite them as guests in your Entra tenant and add their object IDs as `Auth__AllowedUsers__1`, `Auth__AllowedUsers__2`, and so on.
 
 ## Working within SEV's limits
 
