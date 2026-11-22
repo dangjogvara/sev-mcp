@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 
 namespace Sev.Client.Tests;
 
@@ -174,5 +175,39 @@ public class SevTokenProviderTests
 
         Assert.Equal("second", token);
         Assert.Equal(2, _loginHandler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task GetTokenAsync_ConcurrentWithInvalidate_NeverThrowsNullReference()
+    {
+        var handler = new AlwaysSucceedLoginHandler();
+        using var http = new HttpClient(handler) { BaseAddress = SevClient.DefaultBaseAddress };
+        var provider = new SevTokenProvider(http, "user@example.com", "secret", _time);
+
+        var workers = Enumerable.Range(0, 16).Select(worker => Task.Run(async () =>
+        {
+            for (var i = 0; i < 50; i++)
+            {
+                var token = await provider.GetTokenAsync();
+                Assert.False(string.IsNullOrWhiteSpace(token));
+                if ((i + worker) % 5 == 0)
+                {
+                    provider.Invalidate(token);
+                }
+            }
+        }));
+
+        await Task.WhenAll(workers);
+    }
+
+    private sealed class AlwaysSucceedLoginHandler : HttpMessageHandler
+    {
+        private int _count;
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent($"token-{Interlocked.Increment(ref _count)}", Encoding.UTF8, "text/plain")
+            });
     }
 }

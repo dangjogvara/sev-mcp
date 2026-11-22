@@ -34,21 +34,24 @@ public class SevTokenProvider
 
     public async Task<string> GetTokenAsync(CancellationToken cancellationToken = default)
     {
-        if (IsUsable(_current))
+        var current = Volatile.Read(ref _current);
+        if (IsUsable(current))
         {
-            return _current!.Token;
+            return current!.Token;
         }
 
         // Only one caller logs in; the others wait here and then reuse its token.
         await _lock.WaitAsync(cancellationToken);
         try
         {
-            if (!IsUsable(_current))
+            current = Volatile.Read(ref _current);
+            if (!IsUsable(current))
             {
                 var token = await LoginAsync(cancellationToken);
-                _current = new TokenEntry(token, _time.GetUtcNow());
+                current = new TokenEntry(token, _time.GetUtcNow());
+                Volatile.Write(ref _current, current);
             }
-            return _current!.Token;
+            return current!.Token;
         }
         finally
         {
@@ -60,7 +63,7 @@ public class SevTokenProvider
     // token has already been replaced, so several requests failing with the same token cause one login.
     public void Invalidate(string token)
     {
-        var current = _current;
+        var current = Volatile.Read(ref _current);
         if (current?.Token == token)
         {
             Interlocked.CompareExchange(ref _current, null, current);

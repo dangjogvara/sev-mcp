@@ -22,9 +22,12 @@ public class SevAuthHandler(SevTokenProvider tokens) : DelegatingHandler
         response.Dispose();
         tokens.Invalidate(token);
 
+        var freshToken = await tokens.GetTokenAsync(cancellationToken);
+
         // An HttpRequestMessage can only be sent once, so the retry is a copy.
-        var retry = await CloneAsync(request, cancellationToken);
-        retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await tokens.GetTokenAsync(cancellationToken));
+        // Reading request.Content after base.SendAsync assumes repeatable content (such as JsonContent).
+        using var retry = await CloneAsync(request, cancellationToken);
+        retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", freshToken);
         return await base.SendAsync(retry, cancellationToken);
     }
 
