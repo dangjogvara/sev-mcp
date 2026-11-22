@@ -18,6 +18,10 @@ public class MeterDeserializationTests
     [InlineData("\"2013-03-12\"", 2013, 3, 12)]
     [InlineData("\"2013-03-12T00:00:00\"", 2013, 3, 12)]
     [InlineData("\"2023-10-17T23:41:38.715Z\"", 2023, 10, 17)]
+    // An explicit offset keeps the written date: converted to almost any machine's time zone, 01:00 at +14:00
+    // would be the day before.
+    [InlineData("\"2023-10-17T01:00:00+14:00\"", 2023, 10, 17)]
+    [InlineData("\"2023-10-17T23:41:38-08:00\"", 2023, 10, 17)]
     public async Task Dates_AcceptDateAndDateTimeStrings(string json, int year, int month, int day)
     {
         var meter = await DeserializeMeterAsync(installDate: json, removalDate: json);

@@ -53,6 +53,15 @@ public class SevToolErrorsTests
     }
 
     [Fact]
+    public void Describe_RateLimit_ZeroRetryAfter_DoesNotSayZeroSeconds()
+    {
+        var message = SevToolErrors.Describe(new SevApiException(HttpStatusCode.TooManyRequests, "", TimeSpan.Zero));
+
+        Assert.Contains("a few minutes", message);
+        Assert.DoesNotContain("0 seconds", message);
+    }
+
+    [Fact]
     public void Describe_RateLimit_WithoutRetryAfter()
     {
         var message = SevToolErrors.Describe(new SevApiException(HttpStatusCode.TooManyRequests, "", null));

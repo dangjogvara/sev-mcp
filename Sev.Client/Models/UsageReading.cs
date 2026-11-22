@@ -7,5 +7,5 @@ public record UsageReading(
     [property: JsonPropertyName("reading")]
     decimal Value,
     decimal? CumulativeValue,
-    string Unit
+    string? Unit
 ) : IHourlyReading;

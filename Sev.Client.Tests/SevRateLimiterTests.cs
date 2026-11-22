@@ -10,6 +10,16 @@ public class SevRateLimiterTests
         _limiter = new SevRateLimiter(_time);
     }
 
+    [Theory]
+    [InlineData(0, 300)]
+    [InlineData(-1, 300)]
+    [InlineData(10, 0)]
+    [InlineData(10, -1)]
+    public void InvalidLimits_AreRejected(int maxCalls, int windowSeconds)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SevRateLimiter(_time, maxCalls, TimeSpan.FromSeconds(windowSeconds)));
+    }
+
     [Fact]
     public void AllowsTenCalls_RefusesEleventh()
     {

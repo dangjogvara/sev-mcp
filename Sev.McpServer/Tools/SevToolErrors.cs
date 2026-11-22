@@ -48,7 +48,7 @@ public static class SevToolErrors
             "SEV rejected the server's credentials. The server's SEV user name or API key needs to be checked.",
         HttpStatusCode.TooManyRequests =>
             "SEV rate limit reached (10 calls per 5 minutes)."
-            + (ex.RetryAfter is { } wait ? $" Try again in {Math.Ceiling(wait.TotalSeconds)} seconds." : " Try again in a few minutes."),
+            + (ex.RetryAfter is { } wait && wait > TimeSpan.Zero ? $" Try again in {Math.Ceiling(wait.TotalSeconds)} seconds." : " Try again in a few minutes."),
         _ => ex.Message,
     };
 }

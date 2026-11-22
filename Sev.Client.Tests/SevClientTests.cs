@@ -220,6 +220,26 @@ public class SevClientTests
         Assert.Equal(TimeSpan.FromSeconds(90), ex.RetryAfter);
     }
 
+    [Fact]
+    public async Task ErrorStatus_RetryAfterDateInThePast_IsNoWaitNotANegativeOne()
+    {
+        _handler.Respond("", HttpStatusCode.TooManyRequests).Headers.RetryAfter =
+            new RetryConditionHeaderValue(DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Equal(TimeSpan.Zero, ex.RetryAfter);
+    }
+
+    [Fact]
+    public async Task HourlyUsage_NoMeters_ReturnsEmptyWithoutACall()
+    {
+        var result = await _client.GetHourlyUsageAsync([], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        Assert.Empty(result);
+        Assert.Empty(_handler.Requests);
+    }
+
     public static TheoryData<DateTime, DateTime> InvalidRanges => new()
     {
         { new DateTime(2026, 10, 10, 0, 0, 0, DateTimeKind.Utc), new DateTime(2026, 10, 11) },

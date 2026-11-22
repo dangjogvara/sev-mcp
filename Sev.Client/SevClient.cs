@@ -51,6 +51,11 @@ public class SevClient
         string endpoint, IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
         ValidateRange(from, to);
+        // Nothing to ask for: don't spend one of SEV's 10 calls per 5 minutes on it.
+        if (meterIds.Count == 0)
+        {
+            return [];
+        }
         var request = new HourlyRequest(meterIds, from, to);
 
         using var response = await _http.PostAsJsonAsync(endpoint, request, JsonOptions, cancellationToken);
@@ -87,6 +92,14 @@ public class SevClient
         }
     }
 
+    // Retry-After as a wait: a number of seconds, or a date, which may already be past (then no wait, not a negative one).
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage response) => response.Headers.RetryAfter switch
+    {
+        { Delta: { } delta } => delta,
+        { Date: { } date } => date - DateTimeOffset.UtcNow is var wait && wait > TimeSpan.Zero ? wait : TimeSpan.Zero,
+        _ => null,
+    };
+
     internal static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
@@ -95,10 +108,6 @@ public class SevClient
         }
 
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        var retryAfter = response.Headers.RetryAfter;
-        throw new SevApiException(
-            response.StatusCode,
-            body,
-            retryAfter?.Delta ?? retryAfter?.Date - DateTimeOffset.UtcNow);
+        throw new SevApiException(response.StatusCode, body, RetryAfterOf(response));
     }
 }

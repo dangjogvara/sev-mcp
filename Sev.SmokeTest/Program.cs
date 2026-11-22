@@ -6,12 +6,12 @@ var key = Environment.GetEnvironmentVariable("SEV_KEY")
     ?? throw new InvalidOperationException("SEV_KEY not set");
 
 var limiter = new SevRateLimiter();
-var loginHttp = new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() })
+using var loginHttp = new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() })
 {
     BaseAddress = SevClient.DefaultBaseAddress
 };
 var tokens = new SevTokenProvider(loginHttp, user, key);
-var http = new HttpClient(new SevAuthHandler(tokens) { InnerHandler = new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() } })
+using var http = new HttpClient(new SevAuthHandler(tokens) { InnerHandler = new SevRateLimitHandler(limiter) { InnerHandler = new HttpClientHandler() } })
 {
     BaseAddress = SevClient.DefaultBaseAddress
 };
