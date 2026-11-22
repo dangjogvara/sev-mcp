@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\MyUplink.Client\MyUplink.Client.csproj" />
     <ProjectReference Include="..\Sev.Client\Sev.Client.csproj" />
   </ItemGroup>
 

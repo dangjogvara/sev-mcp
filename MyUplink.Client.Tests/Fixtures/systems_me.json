@@ -1,0 +1,26 @@
+{
+  "page": 1,
+  "itemsPerPage": 10,
+  "numItems": 1,
+  "systems": [
+    {
+      "systemId": "00000000-0000-0000-0000-000000000001",
+      "name": "Test heat pump",
+      "securityLevel": "admin",
+      "hasAlarm": false,
+      "country": "Faroe Islands",
+      "devices": [
+        {
+          "id": "TEST000000000001",
+          "connectionState": "Connected",
+          "currentFwVersion": "20230301",
+          "deviceType": "",
+          "product": {
+            "serialNumber": "0000000000000",
+            "name": "CTC EcoZenith i360"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 <Solution>
+  <Project Path="MyUplink.Client.Tests/MyUplink.Client.Tests.csproj" />
+  <Project Path="MyUplink.Client/MyUplink.Client.csproj" />
   <Project Path="Sev.Client.Tests/Sev.Client.Tests.csproj" />
   <Project Path="Sev.Client/Sev.Client.csproj" />
   <Project Path="Sev.McpServer.Tests/Sev.McpServer.Tests.csproj" />

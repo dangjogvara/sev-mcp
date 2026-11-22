@@ -42,8 +42,9 @@ done
 az account show -o none 2>/dev/null || fail "Not logged in to Azure: run 'az login'."
 gh auth status >/dev/null 2>&1 || fail "Not logged in to GitHub: run 'gh auth login'."
 
-# SEV credentials: from the environment, or from .env like the smoke test.
-if [[ -z "${SEV_USER:-}" || -z "${SEV_KEY:-}" ]] && [[ -f .env ]]; then
+# SEV credentials (and optionally myUplink's, for the heat pump tools): from the environment, or from .env
+# like the smoke test.
+if [[ -f .env ]] && [[ -z "${SEV_USER:-}" || -z "${SEV_KEY:-}" || -z "${MYUPLINK_CLIENT_ID:-}" ]]; then
   set -a; source .env; set +a
 fi
 [[ -n "${SEV_USER:-}" && -n "${SEV_KEY:-}" ]] || fail "Set SEV_USER and SEV_KEY, or put them in .env."
@@ -164,6 +165,10 @@ settings = {
     # /home survives restarts and deploys; /home/site/wwwroot is replaced by every deploy.
     "Sev__CacheDirectory": "/home/data/sev-cache",
 }
+# Optional heat pump tools: only when myUplink credentials are in .env (or the environment).
+if e.get("MYUPLINK_CLIENT_ID") and e.get("MYUPLINK_CLIENT_SECRET"):
+    settings["MyUplink__ClientId"] = e["MYUPLINK_CLIENT_ID"]
+    settings["MyUplink__ClientSecret"] = e["MYUPLINK_CLIENT_SECRET"]
 json.dump([{"name": k, "value": v, "slotSetting": False} for k, v in settings.items()], open(sys.argv[1], "w"))
 PY
 chmod 600 "$TMP/settings.json"
