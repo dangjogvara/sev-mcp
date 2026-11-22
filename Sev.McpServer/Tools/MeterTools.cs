@@ -11,7 +11,7 @@ public class MeterTools(SevDataService sev)
     [McpServerTool(Name = "list_meters", Title = "List electricity meters", ReadOnly = true, Idempotent = true)]
     [Description(
         "Lists the SEV electricity meters on the user's account, with address and install/removal dates. " +
-        "get_usage accepts these meters by ID, nickname, meter name or address, or uses all active meters when none are given. " +
+        "get_usage, get_cost and get_co2 accept these meters by ID, nickname, meter name or address, or use all active meters when none are given. " +
         "The list is cached for a few hours, so calling it again is cheap.")]
     public Task<IReadOnlyList<MeterSummary>> ListMetersAsync(CancellationToken cancellationToken) =>
         SevToolErrors.CallAsync(async () =>
@@ -32,11 +32,14 @@ public class MeterTools(SevDataService sev)
                 Removed: m.RemovalDate is not null))
             .ToList();
 
+    // "Street 1, 2nd floor, 100 Tórshavn", leaving out whatever SEV didn't send.
     private static string FormatAddress(Installation i)
     {
-        var street = string.IsNullOrWhiteSpace(i.Floor) ? i.Address.Trim() : $"{i.Address.Trim()}, {i.Floor.Trim()}";
-        return $"{street}, {i.PostalCode} {i.PostalDistrict}";
+        var place = string.Join(" ", new[] { i.PostalCode, i.PostalDistrict }.Where(HasText).Select(s => s!.Trim()));
+        return string.Join(", ", new[] { i.Address, i.Floor, place }.Where(HasText).Select(s => s!.Trim()));
     }
+
+    private static bool HasText(string? s) => !string.IsNullOrWhiteSpace(s);
 }
 
 public record MeterSummary(

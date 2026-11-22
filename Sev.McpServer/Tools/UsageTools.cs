@@ -7,7 +7,7 @@ using Sev.Client.Models;
 namespace Sev.McpServer.Tools;
 
 [McpServerToolType]
-public class UsageTools(SevDataService sev)
+public class UsageTools(SevDataService sev, TimeProvider time)
 {
     // The arguments get_usage, get_cost and get_co2 share, described once.
     private const string FromDescription = "Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.";
@@ -100,12 +100,15 @@ public class UsageTools(SevDataService sev)
         var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
         return SevToolErrors.CallAsync(async () =>
         {
+            // "Now" is taken before fetching: SevDataService fetches up to its own (later or equal) now, so every
+            // hour the summary expects has been asked for, even if the call crosses the top of an hour.
+            var localNow = SevTime.LocalNow(time);
             var available = SevToolErrors.ThrowIfEmpty(MeterTools.Summarize(await sev.GetAvailableMetersAsync(cancellationToken)));
             var selected = ResolveMeters(available, meters);
 
             var result = SevToolErrors.ThrowIfEmptyAnswer(await fetch(selected.Select(m => m.MeterId).ToList(), fromTime, toTime));
             return HourlySummary.Summarize(
-                selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched,
+                selected, result.Meters, fromTime, toTime, localNow, bucket, result.NotFetched,
                 defaultUnit, decimals);
         });
     }

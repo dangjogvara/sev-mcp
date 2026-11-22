@@ -273,7 +273,27 @@ public class UsageToolsTests
 
         Assert.Null(meter.Total);
         Assert.Contains("isn't fetched yet", meter.Note);
-        Assert.DoesNotContain("not zero usage", meter.Note);
+        Assert.DoesNotContain("not zero", meter.Note);
+    }
+
+    [Fact]
+    public void Summarize_NotFetchedWithinOneDay_ShowsTheTimes()
+    {
+        var meter = Assert.Single(HourlySummary.Summarize(
+            [Heat], [new MeterUsage("2222", [])], Day(2026, 11, 21), Later, Later, Granularity.Hour,
+            notFetched: (Day(2026, 11, 21), Day(2026, 11, 21).AddHours(12))));
+
+        Assert.Contains("from 2026-11-21 00:00 up to (not including) 2026-11-21 12:00 isn't fetched yet", meter.Note);
+    }
+
+    [Fact]
+    public void Summarize_MissingCost_DoesNotTalkAboutUsage()
+    {
+        var meter = Assert.Single(HourlySummary.Summarize(
+            [Heat], [new MeterCost("2222", [])], Day(2026, 10, 1), Day(2026, 10, 2), Later, Granularity.Day, defaultUnit: "DKR", decimals: 2));
+
+        Assert.Contains("the data is missing, not zero.", meter.Note);
+        Assert.DoesNotContain("usage", meter.Note);
     }
 
     // --- Cost ---

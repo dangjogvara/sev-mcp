@@ -2,7 +2,7 @@ using Sev.Client.Models;
 
 namespace Sev.Client;
 
-// What UsageResult, CostResult and Co2Result have in common, so the MCP tools can handle both the same way.
+// What UsageResult, CostResult and Co2Result have in common, so the MCP tools can handle all three the same way.
 // Meters holds the readings within the requested range: SEV's answer plus cached days. NotFetched is the
 // oldest part of the range that wasn't fetched in this call (SEV's per-call limits or an empty answer);
 // null when everything was fetched. EmptyAnswer is true when SEV answered the first request with an empty

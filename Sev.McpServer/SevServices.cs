@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sev.Client;
 
@@ -14,6 +15,9 @@ public static class SevServices
             .BindConfiguration(SevOptions.SectionName)
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        // The clock the tools read "now" from (tests can replace it).
+        services.TryAddSingleton(TimeProvider.System);
 
         // One rate limiter for every SEV call (login included), shared by both HttpClients below.
         services.AddSingleton(new SevRateLimiter());
