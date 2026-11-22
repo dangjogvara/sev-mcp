@@ -95,6 +95,51 @@ public class SevClientTests
         Assert.Equal("kWh", reading.Unit);
     }
 
+    [Fact]
+    public async Task GetEstimatedCostAsync_PostsRequestWithLocalDates()
+    {
+        _handler.Respond("[]");
+
+        await _client.GetEstimatedCostAsync([1111, 2222], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        var request = Assert.Single(_handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal(BaseAddress + "estimated_cost", request.Uri.ToString());
+        Assert.Equal(
+            """{"meters":[1111,2222],"from_date":"2026-10-10T00:00:00","to_date":"2026-10-11T00:00:00"}""",
+            request.Body);
+    }
+
+    [Fact]
+    public async Task GetEstimatedCostAsync_MapsAllFields()
+    {
+        _handler.RespondWithFixture("estimated_cost.json");
+
+        var cost = await _client.GetEstimatedCostAsync([1111, 2222], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        Assert.Equal(2, cost.Count);
+        var meter = cost[0];
+        Assert.Equal("2222", meter.MeterId);
+        Assert.Equal(3, meter.Readings.Count);
+
+        var reading = meter.Readings[1];
+        Assert.Equal(new DateTime(2026, 10, 10, 1, 0, 0), reading.TimeStamp);
+        Assert.Equal(DateTimeKind.Unspecified, reading.TimeStamp.Kind);
+        Assert.Equal(1.3760499999948483m, reading.Value);
+        Assert.Equal("DKR", reading.Unit);
+        Assert.Equal(1.825m, reading.PriceUnit);
+        Assert.Equal(310, reading.Tarif);
+    }
+
+    [Fact]
+    public async Task GetEstimatedCostAsync_RejectsInvalidRangeWithoutCallingApi()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _client.GetEstimatedCostAsync([1111], new DateTime(2026, 10, 11), new DateTime(2026, 10, 10)));
+
+        Assert.Empty(_handler.Requests);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("https://api.sev.fo/api/CustomerRESTApi")]

@@ -104,6 +104,16 @@ public class SevToolErrorsTests
     }
 
     [Fact]
+    public void ThrowIfEmptyAnswer_CostEmptyAnswerWithoutCachedData_MentionsRateLimit()
+    {
+        var result = new CostResult([], (new DateTime(2026, 11, 1), new DateTime(2026, 11, 2)), EmptyAnswer: true);
+
+        var ex = Assert.Throws<McpException>(() => SevToolErrors.ThrowIfEmptyAnswer(result));
+
+        Assert.Contains("rate limit", ex.Message);
+    }
+
+    [Fact]
     public async Task CallAsync_TurnsLocalRateLimitIntoMcpExceptionWithWaitTime()
     {
         var limitError = new SevRateLimitExceededException(TimeSpan.FromSeconds(89.2));

@@ -1,0 +1,40 @@
+[
+  {
+    "meter_id": "2222",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 2.129775,
+        "unit": "DKR",
+        "price_unit": 1.825,
+        "tarif": 310
+      },
+      {
+        "time_stamp": "2026-10-10T01:00:00",
+        "reading": 1.3760499999948483,
+        "unit": "DKR",
+        "price_unit": 1.825,
+        "tarif": 310
+      },
+      {
+        "time_stamp": "2026-10-10T02:00:00",
+        "reading": 1.436275,
+        "unit": "DKR",
+        "price_unit": 1.825,
+        "tarif": 310
+      }
+    ]
+  },
+  {
+    "meter_id": "1111",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 2.126125,
+        "unit": "DKR",
+        "price_unit": 1.825,
+        "tarif": 310
+      }
+    ]
+  }
+]

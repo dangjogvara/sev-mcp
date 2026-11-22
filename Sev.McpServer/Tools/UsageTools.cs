@@ -35,7 +35,45 @@ public class UsageTools(SevDataService sev)
         [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
         [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
         [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        GetHourlySeriesAsync(
+            from, to, granularity, meters,
+            async (ids, fromTime, toTime) => await sev.GetHourlyUsageAsync(ids, fromTime, toTime, cancellationToken),
+            defaultUnit: "kWh", decimals: 3, cancellationToken);
+
+    [McpServerTool(Name = "get_cost", Title = "Get estimated electricity cost", ReadOnly = true, Idempotent = true)]
+    [Description(
+        "Gets SEV's estimated cost of the electricity used, in DKK (unit 'DKR'), per hour, day or month for the user's meters, " +
+        "with a total per meter. Each hour's cost is that hour's kWh times SEV's price per kWh for the meter's tariff. " +
+        "It is an estimate of the electricity used and may differ from the bill. " +
+        "Arguments, limits and missing-data reporting are the same as for get_usage: times are local Faroese time, " +
+        "the range is [from, to), and long periods may come back partly fetched with a note to ask again in a few minutes. " +
+        "Cost uses the same SEV call budget as get_usage (10 calls per 5 minutes), so asking for both usage and cost of a " +
+        "long period takes twice the calls. Completed past days are cached. " +
+        "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
+        "don't report it as zero cost or as a complete total.")]
+    public Task<IReadOnlyList<MeterUsageResult>> GetCostAsync(
+        [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
+        [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
+        [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
+        [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
+        CancellationToken cancellationToken = default) =>
+        GetHourlySeriesAsync(
+            from, to, granularity, meters,
+            async (ids, fromTime, toTime) => await sev.GetEstimatedCostAsync(ids, fromTime, toTime, cancellationToken),
+            defaultUnit: "DKR", decimals: 2, cancellationToken);
+
+    // What get_usage and get_cost share: check the arguments, pick the meters, fetch the hourly series
+    // with `fetch`, and summarize it. defaultUnit is used when no reading says its unit; decimals is the rounding.
+    private Task<IReadOnlyList<MeterUsageResult>> GetHourlySeriesAsync(
+        string from,
+        string to,
+        string granularity,
+        string[]? meters,
+        Func<IReadOnlyList<int>, DateTime, DateTime, Task<IHourlyResult>> fetch,
+        string defaultUnit,
+        int decimals,
+        CancellationToken cancellationToken)
     {
         var bucket = ParseGranularity(granularity);
         var (fromTime, toTime) = ParseRange(from, to, bucket);
@@ -44,9 +82,10 @@ public class UsageTools(SevDataService sev)
             var available = SevToolErrors.ThrowIfEmpty(MeterTools.Summarize(await sev.GetAvailableMetersAsync(cancellationToken)));
             var selected = ResolveMeters(available, meters);
 
-            var result = SevToolErrors.ThrowIfEmptyAnswer(
-                await sev.GetHourlyUsageAsync(selected.Select(m => m.MeterId).ToList(), fromTime, toTime, cancellationToken));
-            return Summarize(selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched);
+            var result = SevToolErrors.ThrowIfEmptyAnswer(await fetch(selected.Select(m => m.MeterId).ToList(), fromTime, toTime));
+            return Summarize(
+                selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched,
+                defaultUnit, decimals);
         });
     }
 
@@ -137,9 +176,11 @@ public class UsageTools(SevDataService sev)
     // range isn't reported as missing data before it was there.
     // notFetched is the part of the range SevDataService didn't get to in this call; missing hours there
     // are reported as "not fetched yet" rather than as missing data.
+    // Works for any hourly series (kWh usage, DKK cost): defaultUnit is used when there are no readings to
+    // take the unit from, and values are rounded to `decimals` places.
     public static IReadOnlyList<MeterUsageResult> Summarize(
-        IReadOnlyList<MeterSummary> meters, IReadOnlyList<MeterUsage> usage, DateTime from, DateTime to, DateTime localNow,
-        Granularity granularity, (DateTime From, DateTime To)? notFetched = null)
+        IReadOnlyList<MeterSummary> meters, IReadOnlyList<IMeterReadings> usage, DateTime from, DateTime to, DateTime localNow,
+        Granularity granularity, (DateTime From, DateTime To)? notFetched = null, string defaultUnit = "kWh", int decimals = 3)
     {
         var rangeHours = ExpectedHours(from, to, localNow);
         var byMeter = usage.ToDictionary(m => m.MeterId);
@@ -150,7 +191,9 @@ public class UsageTools(SevDataService sev)
                 byMeter.TryGetValue(meter.MeterId.ToString(), out var m) ? m.Readings : [],
                 rangeHours,
                 granularity,
-                notFetched))
+                notFetched,
+                defaultUnit,
+                decimals))
             .ToList();
     }
 
@@ -158,7 +201,7 @@ public class UsageTools(SevDataService sev)
     // have no time of day, so on those days the meter is taken to start at its first reading and to end
     // after its last one; without a reading that day, the whole day is expected.
     public static IReadOnlyList<DateTime> ExpectedHoursFor(
-        MeterSummary meter, IReadOnlyList<DateTime> rangeHours, IReadOnlyList<UsageReading> readings)
+        MeterSummary meter, IReadOnlyList<DateTime> rangeHours, IReadOnlyList<IHourlyReading> readings)
     {
         IEnumerable<DateTime> ReadingsOn(DateOnly day) =>
             readings.Select(r => r.TimeStamp).Where(t => DateOnly.FromDateTime(t) == day);
@@ -180,8 +223,8 @@ public class UsageTools(SevDataService sev)
     }
 
     private static MeterUsageResult Summarize(
-        MeterSummary meter, IReadOnlyList<UsageReading> readings, IReadOnlyList<DateTime> rangeHours, Granularity granularity,
-        (DateTime From, DateTime To)? notFetched)
+        MeterSummary meter, IReadOnlyList<IHourlyReading> readings, IReadOnlyList<DateTime> rangeHours, Granularity granularity,
+        (DateTime From, DateTime To)? notFetched, string defaultUnit, int decimals)
     {
         var expectedHours = ExpectedHoursFor(meter, rangeHours, readings);
         var readingHours = readings.Select(r => r.TimeStamp).ToHashSet();
@@ -223,7 +266,7 @@ public class UsageTools(SevDataService sev)
                 var notFetchedInPeriod = expectedHours.Any(h => PeriodKey(h, granularity) == key && IsNotFetched(h));
                 return new UsagePeriod(
                     key,
-                    inPeriod.Count > 0 ? Math.Round(inPeriod.Sum(r => r.Value), 3) : null,
+                    inPeriod.Count > 0 ? Math.Round(inPeriod.Sum(r => r.Value), decimals) : null,
                     missingInPeriod > 0 ? missingInPeriod : null,
                     notFetchedInPeriod ? true : null);
             })
@@ -232,8 +275,8 @@ public class UsageTools(SevDataService sev)
         return new MeterUsageResult(
             meter.MeterId,
             meter.MeterName,
-            readings.FirstOrDefault()?.Unit ?? "kWh",
-            hasReadings ? Math.Round(readings.Sum(r => r.Value), 3) : null,
+            readings.FirstOrDefault()?.Unit ?? defaultUnit,
+            hasReadings ? Math.Round(readings.Sum(r => r.Value), decimals) : null,
             expectedHours.Count,
             missingHours,
             note,
