@@ -89,4 +89,18 @@ public class SevAuthHandlerTests
         Assert.Single(_loginHandler.Requests);
         Assert.Single(_apiHandler.Requests);
     }
+
+    [Fact]
+    public async Task Unauthorized_WhenReloginFails_DoesNotRetryApi()
+    {
+        _loginHandler.Respond("old", mediaType: "text/plain");
+        _loginHandler.Respond("invalid credentials", System.Net.HttpStatusCode.Unauthorized, "text/plain");
+        _apiHandler.Respond("", System.Net.HttpStatusCode.Unauthorized);
+
+        var ex = await Assert.ThrowsAsync<SevApiException>(() => _client.GetAvailableMetersAsync());
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, ex.StatusCode);
+        Assert.Equal(2, _loginHandler.Requests.Count);
+        Assert.Single(_apiHandler.Requests);
+    }
 }
