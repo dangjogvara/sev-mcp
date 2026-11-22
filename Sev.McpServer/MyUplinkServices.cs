@@ -1,4 +1,7 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using MyUplink.Client;
+using Sev.McpServer.HeatPump;
 
 namespace Sev.McpServer;
 
@@ -12,6 +15,10 @@ public class MyUplinkOptions
     public string? ClientId { get; set; }
 
     public string? ClientSecret { get; set; }
+
+    // Log the heat pump's readings every hour (HeatPumpLogger), since myUplink gives apps no history.
+    // On by default; tests turn it off so they never call myUplink.
+    public bool LogHourly { get; set; } = true;
 
     public bool Enabled => !string.IsNullOrWhiteSpace(ClientId) && !string.IsNullOrWhiteSpace(ClientSecret);
 
@@ -41,6 +48,19 @@ public static class MyUplinkServices
             return new MyUplinkTokenProvider(http, options.ClientId!, options.ClientSecret!);
         });
         builder.Services.AddHttpClient<MyUplinkClient>(http => http.BaseAddress = MyUplinkClient.DefaultBaseAddress);
+
+        // The hourly log, kept next to the SEV cache (Sev:CacheDirectory) so it survives restarts.
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(sp =>
+        {
+            var directory = sp.GetRequiredService<IOptions<SevOptions>>().Value.CacheDirectory;
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<HeatPumpLog>();
+            return new HeatPumpLog(directory, message => logger.LogInformation("{Message}", message));
+        });
+        if (options.LogHourly)
+        {
+            builder.Services.AddHostedService<HeatPumpLogger>();
+        }
         return true;
     }
 }

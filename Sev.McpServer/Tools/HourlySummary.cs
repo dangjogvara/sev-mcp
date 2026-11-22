@@ -141,7 +141,7 @@ public static class HourlySummary
         };
 
     // ISO-style keys sort chronologically as strings.
-    private static string PeriodKey(DateTime time, Granularity granularity) => granularity switch
+    internal static string PeriodKey(DateTime time, Granularity granularity) => granularity switch
     {
         Granularity.Hour => time.ToString("yyyy-MM-dd'T'HH:mm"),
         Granularity.Day => time.ToString("yyyy-MM-dd"),
