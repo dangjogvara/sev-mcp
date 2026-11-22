@@ -1,7 +1,7 @@
 namespace Sev.McpServer;
 
 // The "Auth" configuration section. When Authority is set, /mcp requires an OAuth access token from that
-// authorization server (Microsoft Entra ID), issued to one of AllowedUsers; see McpLogin. Without it the
+// authorization server (Microsoft Entra ID), issued to one of AllowedUsers for one of Scopes; see McpLogin. Without it the
 // server only allows local use, and outside Development it refuses to start.
 // Hosted, set it with environment variables, e.g. Auth__Authority, Auth__AllowedUsers__0.
 public class AuthOptions
@@ -20,6 +20,7 @@ public class AuthOptions
     public string[] Audiences { get; set; } = [];
 
     // Scopes Claude should ask for, advertised in the metadata, e.g. api://<client-id>/mcp.access.
+    // A token must also hold one of them in its "scp" claim (by short name, see ShortScopeName), else 403.
     public string[] Scopes { get; set; } = [];
 
     // Entra object IDs ("oid" claim) of the users allowed in. Anyone else with a valid token gets 403.

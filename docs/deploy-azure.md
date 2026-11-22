@@ -82,7 +82,7 @@ When you connect, Claude opens Microsoft's sign-in page. Sign in with the accoun
 - **The server doesn't start:** look for "Invalid Auth configuration" or "requires a login" in the log. One of the `Auth__` app settings is missing or wrong. Re-running the script sets them again.
 - **AADSTS9010010 or `invalid_target` during sign-in:** Entra doesn't recognise the `resource` Claude sent. Check that the app registration's Application ID URIs include the MCP URL exactly (no trailing slash), and that `requestedAccessTokenVersion` is 2 in its manifest.
 - **The script fails at "Application ID URI":** your tenant has a policy against non-verified URIs. Check that the token version really is 2 (the exemption depends on it), or ask your tenant admin about an exemption.
-- **403 after signing in:** you signed in with a different account than the one in `Auth__AllowedUsers__0`.
+- **403 after signing in:** you signed in with a different account than the one in `Auth__AllowedUsers__0`, or the token lacks the `mcp.access` scope. Check that `Auth__Scopes__0` is `api://<client-id>/mcp.access` and that the app registration still exposes the `mcp.access` scope (re-running the script sets both).
 - **The connector keeps asking you to sign in:** the log shows why each token was rejected (audience, issuer, expiry). Also check that the client secret in Claude hasn't expired (it's valid for 2 years).
 - **New client secret:** this adds a new secret alongside the old one; enter it in Claude, then delete the old one in the Entra portal.
   ```bash
