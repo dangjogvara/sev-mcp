@@ -34,7 +34,7 @@ If you change `RESOURCE_GROUP` or `LOCATION`, pass the same values every time yo
 
 What it does:
 
-1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the app isn't put to sleep when idle, which would drop the SEV login and the rate-limit count), TLS 1.2 and FTP disabled.
+1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the app isn't put to sleep when idle, which would drop the SEV login and the rate-limit count), a [Health check](#health-check) on `/health`, TLS 1.2 and FTP disabled.
 2. Creates the Entra app registration "SEV MCP", the login Claude uses:
    - single tenant
    - Claude's callback URL `https://claude.ai/api/mcp/auth_callback`
@@ -86,6 +86,21 @@ When you connect, Claude opens Microsoft's sign-in page. Sign in with the accoun
 - **New tools:** Claude keeps the list of tools from when the connector was connected. After an update that adds tools, open **Settings > Connectors**, disconnect the connector and connect it again, then start a new chat.
 - **New settings:** if an update adds settings, run the setup script again with the same `RESOURCE_GROUP`, `LOCATION` and `APP`. It reuses everything and doesn't create a new client secret.
 - **Package updates:** Dependabot opens PRs for new package versions in this repository, and syncing your fork brings them in. In a fork Dependabot may be off; turn it on under Settings > Code security if you want its PRs there too.
+
+## Keep it to one instance
+
+Run the server as a single instance: don't scale the App Service plan out to more than one, and don't turn on autoscale. Several things live in the server's memory and only work if there's exactly one copy:
+
+- **SEV's rate limit** is counted in memory (`SevRateLimiter`). Two instances would each think they had 10 calls, and SEV would start answering with empty data.
+- **The SEV and myUplink logins** are shared tokens in memory, so each instance would log in separately and spend calls doing it.
+- **The cache and the heat pump log** are in memory and saved to files in `/home`, which all instances share. Two instances would overwrite each other's files, and both would log the heat pump every hour.
+- **MCP sessions** (Streamable HTTP) live in memory, so a client's next request has to reach the same instance.
+
+B1 runs one instance by default, so nothing needs doing; just don't change it. More instances would need that state moved out of the process first (for example the cache to a database and the rate limit to a shared store).
+
+## Health check
+
+The server answers `GET /health` (and `GET /`) with 200 without a login, and without calling SEV or myUplink. The setup script turns on App Service's Health check for `/health`: it pings it every minute and, with one instance, replaces the instance if it stays unhealthy for an hour. The status is under **Monitoring > Health check** on the web app. Turning Health check on or off restarts the app.
 
 ## Your data and your secrets
 
