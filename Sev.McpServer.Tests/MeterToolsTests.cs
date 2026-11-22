@@ -50,6 +50,21 @@ public class MeterToolsTests
     }
 
     [Fact]
+    public void Summarize_MissingAddressParts_AreLeftOut()
+    {
+        Installation Bare(string? address, string? postalCode, string? district) =>
+            new(new DateTime(2019, 6, 1), null, 10001, null, address, null, postalCode, district, 310, "OS", [Meter(1111, null)]);
+        var customers = new List<Customer>
+        {
+            new("Test Customer", [Bare(null, "100", "Tórshavn"), Bare("Testgøta 1", null, null), Bare(null, null, null)]),
+        };
+
+        var meters = MeterTools.Summarize(customers);
+
+        Assert.Equal(["100 Tórshavn", "Testgøta 1", ""], meters.Select(m => m.Address));
+    }
+
+    [Fact]
     public void Summarize_NoCustomers_ReturnsEmpty()
     {
         Assert.Empty(MeterTools.Summarize([]));

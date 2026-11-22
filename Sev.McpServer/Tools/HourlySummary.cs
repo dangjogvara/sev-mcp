@@ -1,3 +1,4 @@
+using System.Globalization;
 using Sev.Client.Models;
 
 namespace Sev.McpServer.Tools;
@@ -74,7 +75,7 @@ public static class HourlySummary
         if (notFetchedHours > 0)
         {
             notes.Add(
-                $"Data from {notFetched!.Value.From:yyyy-MM-dd} up to (not including) {notFetched.Value.To:yyyy-MM-dd} isn't fetched yet: " +
+                $"Data from {FormatRange(notFetched!.Value.From, notFetched.Value.To)} isn't fetched yet: " +
                 "SEV returns at most 31 days per call and allows 10 calls per 5 minutes. Ask again in a few minutes to get the rest; " +
                 "what was already fetched is kept.");
         }
@@ -83,7 +84,7 @@ public static class HourlySummary
             notes.Add(
                 rangeHours.Count == 0 ? "This period hasn't happened yet, so there are no readings."
                 : expectedHours.Count == 0 ? $"The meter wasn't installed during this period ({Installation(meter)}), so there are no readings."
-                : "No readings for this period: the data is missing, not zero usage.");
+                : "No readings for this period: the data is missing, not zero.");
         }
         else if (missingHours > notFetchedHours)
         {
@@ -121,6 +122,14 @@ public static class HourlySummary
             note,
             granularity.ToString().ToLowerInvariant(),
             periods);
+    }
+
+    // "2026-11-01 up to (not including) 2026-11-03", with times when either end isn't midnight, so a range
+    // within one day doesn't read as "from 2026-11-21 up to 2026-11-21".
+    private static string FormatRange(DateTime from, DateTime to)
+    {
+        var format = from.TimeOfDay == TimeSpan.Zero && to.TimeOfDay == TimeSpan.Zero ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm";
+        return $"{from.ToString(format, CultureInfo.InvariantCulture)} up to (not including) {to.ToString(format, CultureInfo.InvariantCulture)}";
     }
 
     private static string Installation(MeterSummary meter) =>
