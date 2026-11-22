@@ -8,4 +8,4 @@ public record UsageReading(
     decimal Value,
     decimal? CumulativeValue,
     string Unit
-);
+) : IHourlyReading;

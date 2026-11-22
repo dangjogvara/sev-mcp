@@ -276,6 +276,39 @@ public class UsageToolsTests
         Assert.DoesNotContain("not zero usage", meter.Note);
     }
 
+    // --- Cost ---
+
+    [Fact]
+    public void Summarize_Cost_UsesSevUnitAndRoundsToTwoDecimals()
+    {
+        var readings = Enumerable.Range(0, 24)
+            .Select(h => new CostReading(Day(2026, 10, 10).AddHours(h), 1.3760499999948483m, "DKR", 1.825m, 310))
+            .ToList();
+
+        var meter = Assert.Single(UsageTools.Summarize(
+            [Heat], [new MeterCost("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
+            defaultUnit: "DKR", decimals: 2));
+
+        Assert.Equal("DKR", meter.Unit);
+        Assert.Equal(33.03m, meter.Total);
+        Assert.Equal(0, meter.MissingHours);
+        Assert.Null(meter.Note);
+        Assert.Equal([new UsagePeriod("2026-10-10", 33.03m, null)], meter.Periods);
+    }
+
+    [Fact]
+    public void Summarize_CostWithoutReadings_UsesDefaultUnitAndSaysDataIsMissing()
+    {
+        var meter = Assert.Single(UsageTools.Summarize(
+            [Heat], [new MeterCost("2222", [])], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
+            defaultUnit: "DKR", decimals: 2));
+
+        Assert.Equal("DKR", meter.Unit);
+        Assert.Null(meter.Total);
+        Assert.Equal(24, meter.MissingHours);
+        Assert.Contains("missing", meter.Note);
+    }
+
     // --- Meters installed or removed within the range ---
 
     [Fact]

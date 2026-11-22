@@ -29,4 +29,6 @@ public class SevCache(TimeProvider? timeProvider = null)
     internal DateTimeOffset MetersFetchedAt { get; set; }
 
     internal Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<UsageReading>> UsageDays { get; } = [];
+
+    internal Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<CostReading>> CostDays { get; } = [];
 }

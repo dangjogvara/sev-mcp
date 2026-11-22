@@ -409,6 +409,65 @@ public class SevDataServiceTests
         AssertRequest(_handler.Requests[1], [1111], Start(Day(-40)), Start(Day(-30)));
     }
 
+    // --- Cost: same fetching and caching as usage, in its own cache ---
+
+    [Fact]
+    public async Task Cost_PastDaysComeFromCacheTheSecondTime()
+    {
+        _handler.Respond(CostJson((1111, Day(-2), 24)));
+
+        var first = await _data.GetEstimatedCostAsync([1111], Start(Day(-2)), Start(Day(-1)));
+        var second = await _data.GetEstimatedCostAsync([1111], Start(Day(-2)), Start(Day(-1)));
+
+        var request = Assert.Single(_handler.Requests);
+        Assert.EndsWith("estimated_cost", request.Uri.ToString());
+        Assert.Equal(24, first.Meters.Single().Readings.Count);
+        Assert.Equal(first.Meters.Single().Readings, second.Meters.Single().Readings);
+        Assert.Equal(1.825m, second.Meters.Single().Readings[0].PriceUnit);
+    }
+
+    [Fact]
+    public async Task Cost_AndUsage_AreCachedSeparately()
+    {
+        _handler.Respond(UsageJson((1111, Day(-2), 24)));
+        _handler.Respond(CostJson((1111, Day(-2), 24)));
+
+        await UsageAsync([1111], Start(Day(-2)), Start(Day(-1)));
+        var cost = await _data.GetEstimatedCostAsync([1111], Start(Day(-2)), Start(Day(-1)));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.EndsWith("hourly_kwh_usage", _handler.Requests[0].Uri.ToString());
+        Assert.EndsWith("estimated_cost", _handler.Requests[1].Uri.ToString());
+        Assert.All(cost.Meters.Single().Readings, r => Assert.Equal("DKR", r.Unit));
+    }
+
+    [Fact]
+    public async Task Cost_LongRange_IsFetchedInPiecesAndReportsWhatDidNotFit()
+    {
+        // 8 pieces of 31 days: 6 are fetched, the rest is reported as not fetched.
+        for (var piece = 1; piece <= SevDataService.MaxRequestsPerCall; piece++)
+        {
+            _handler.Respond(CostJson(DaysOf(1111, Day(-31 * piece), 31)));
+        }
+
+        var result = await _data.GetEstimatedCostAsync([1111], Start(Day(-248)), Start(Today));
+
+        Assert.Equal(SevDataService.MaxRequestsPerCall, _handler.Requests.Count);
+        Assert.Equal((Start(Day(-248)), Start(Day(-186))), result.NotFetched);
+        Assert.Equal(186 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Cost_EmptyAnswer_IsReported()
+    {
+        _handler.Respond("[]");
+
+        var result = await _data.GetEstimatedCostAsync([1111], Start(Day(-2)), Start(Day(-1)));
+
+        Assert.True(result.EmptyAnswer);
+        Assert.Empty(result.Meters);
+    }
+
     // For tests that only look at the readings, not at what wasn't fetched.
     private async Task<IReadOnlyList<MeterUsage>> UsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to) =>
         (await _data.GetHourlyUsageAsync(meterIds, from, to)).Meters;
@@ -463,6 +522,26 @@ public class SevDataServiceTests
         Assert.Equal(meters, body.RootElement.GetProperty("meters").EnumerateArray().Select(e => e.GetInt32()));
         Assert.Equal(from.ToString("s", CultureInfo.InvariantCulture), body.RootElement.GetProperty("from_date").GetString());
         Assert.Equal(to.ToString("s", CultureInfo.InvariantCulture), body.RootElement.GetProperty("to_date").GetString());
+    }
+
+    // An estimated_cost response with `hours` readings of 1.825 DKK from 00:00 for each (meter, day).
+    private static string CostJson(params (int Meter, DateOnly Day, int Hours)[] parts)
+    {
+        var meters = parts
+            .GroupBy(p => p.Meter)
+            .Select(g => new
+            {
+                meter_id = g.Key.ToString(),
+                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours).Select(h => new
+                {
+                    time_stamp = Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture),
+                    reading = 1.825m,
+                    unit = "DKR",
+                    price_unit = 1.825m,
+                    tarif = 310,
+                })),
+            });
+        return JsonSerializer.Serialize(meters);
     }
 
     // A hourly_kwh_usage response with `hours` readings from 00:00 for each (meter, day).

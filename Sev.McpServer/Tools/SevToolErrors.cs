@@ -35,9 +35,9 @@ public static class SevToolErrors
     public static IReadOnlyList<T> ThrowIfEmpty<T>(IReadOnlyList<T> result) =>
         result.Count > 0 ? result : throw new McpException(EmptyResultMessage);
 
-    // For usage, only SEV's own empty answer counts: a range with nothing to fetch yet (the future) isn't
-    // one, and when cached days can still be shown, the rest is reported as not fetched instead.
-    public static UsageResult ThrowIfEmptyAnswer(UsageResult result) =>
+    // For usage and cost, only SEV's own empty answer counts: a range with nothing to fetch yet (the future)
+    // isn't one, and when cached days can still be shown, the rest is reported as not fetched instead.
+    public static T ThrowIfEmptyAnswer<T>(T result) where T : IHourlyResult =>
         result.EmptyAnswer && result.Meters.All(m => m.Readings.Count == 0)
             ? throw new McpException(EmptyResultMessage)
             : result;

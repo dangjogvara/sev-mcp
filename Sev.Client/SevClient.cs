@@ -44,6 +44,20 @@ public class SevClient
         return usage ?? [];
     }
 
+    // SEV's estimate of what the electricity used cost, per hour, in DKK. Same request as hourly_kwh_usage.
+    public async Task<IReadOnlyList<MeterCost>> GetEstimatedCostAsync(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        ValidateRange(from, to);
+        var request = new UsageRequest(meterIds, from, to);
+
+        using var response = await _http.PostAsJsonAsync("estimated_cost", request, JsonOptions, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var cost = await response.Content.ReadFromJsonAsync<List<MeterCost>>(JsonOptions, cancellationToken);
+        return cost ?? [];
+    }
+
     // The API works in local Faroese time and serializes DateTime as-is, so a Utc or Local
     // DateTime would be sent with "Z" or an offset and shift the requested hours.
     internal static void ValidateRange(DateTime from, DateTime to)
