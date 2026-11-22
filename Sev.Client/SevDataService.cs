@@ -101,6 +101,10 @@ public class SevDataService(SevClient sev, SevCache cache)
     private record FetchOutcome<TReading>(
         Dictionary<int, List<TReading>> Readings, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer);
 
+    // One request to SEV: the missing days it covers (FirstDay to LastDay, inclusive) and the times it asks for,
+    // [From, To). From and To are whole days, except today, which is fetched from its start (or `from`) up to now.
+    private readonly record struct Piece(DateOnly FirstDay, DateOnly LastDay, DateTime From, DateTime To);
+
     // Asks SEV for one piece: these meters, from one time to another.
     private delegate Task<List<MeterReadings<TReading>>> FetchPiece<TReading>(IReadOnlyList<int> meterIds, DateTime from, DateTime to);
 
@@ -198,7 +202,7 @@ public class SevDataService(SevClient sev, SevCache cache)
         var fetched = new Dictionary<int, List<TReading>>();
         for (var i = 0; i < pieces.Count; i++)
         {
-            var (lo, hi, pieceFrom, pieceTo) = pieces[i];
+            var (firstDay, lastDay, pieceFrom, pieceTo) = pieces[i];
             // Every earlier piece got an answer: an empty one ends the loop.
             var anyAnswer = i > 0;
             if (i >= MaxRequestsPerCall)
@@ -207,7 +211,7 @@ public class SevDataService(SevClient sev, SevCache cache)
             }
 
             var pieceMeters = missing
-                .Where(m => m.Day >= lo && m.Day <= hi)
+                .Where(m => m.Day >= firstDay && m.Day <= lastDay)
                 .Select(m => m.Meter)
                 .Distinct()
                 .ToList();
@@ -349,62 +353,29 @@ public class SevDataService(SevClient sev, SevCache cache)
     // newest first. Gaps larger than one piece are skipped so already-cached stretches aren't re-fetched,
     // while small cached gaps inside a 31-day window stay in one call. Boundaries fall on midnight (or
     // from/fetchEnd for today), so every whole past day lies inside one piece and can be cached.
-    private static List<(DateOnly Lo, DateOnly Hi, DateTime From, DateTime To)> PiecesNewestFirst(
+    private static List<Piece> PiecesNewestFirst(
         IReadOnlyList<DateOnly> missingDaysAscending, DateTime from, DateTime fetchEnd, DateOnly today)
     {
         var todayStart = today.ToDateTime(TimeOnly.MinValue);
-        var pieces = new List<(DateOnly Lo, DateOnly Hi, DateTime From, DateTime To)>();
-        for (var hiIndex = missingDaysAscending.Count - 1; hiIndex >= 0;)
+        var pieces = new List<Piece>();
+        for (var lastIndex = missingDaysAscending.Count - 1; lastIndex >= 0;)
         {
-            var hi = missingDaysAscending[hiIndex];
-            var limit = hi.AddDays(-(MaxDaysPerRequest - 1));
-            var loIndex = hiIndex;
-            while (loIndex > 0 && missingDaysAscending[loIndex - 1] >= limit)
+            var lastDay = missingDaysAscending[lastIndex];
+            var limit = lastDay.AddDays(-(MaxDaysPerRequest - 1));
+            var firstIndex = lastIndex;
+            while (firstIndex > 0 && missingDaysAscending[firstIndex - 1] >= limit)
             {
-                loIndex--;
+                firstIndex--;
             }
 
-            var lo = missingDaysAscending[loIndex];
-            var pieceFrom = lo == today ? Max(from, todayStart) : lo.ToDateTime(TimeOnly.MinValue);
-            var pieceTo = hi == today ? fetchEnd : hi.AddDays(1).ToDateTime(TimeOnly.MinValue);
-            pieces.Add((lo, hi, pieceFrom, pieceTo));
-            hiIndex = loIndex - 1;
+            var firstDay = missingDaysAscending[firstIndex];
+            var pieceFrom = firstDay == today ? Max(from, todayStart) : firstDay.ToDateTime(TimeOnly.MinValue);
+            var pieceTo = lastDay == today ? fetchEnd : lastDay.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            pieces.Add(new Piece(firstDay, lastDay, pieceFrom, pieceTo));
+            lastIndex = firstIndex - 1;
         }
         return pieces;
     }
 
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
-}
-
-// What UsageResult, CostResult and Co2Result have in common, so the MCP tools can handle both the same way.
-// Meters holds the readings within the requested range: SEV's answer plus cached days. NotFetched is the
-// oldest part of the range that wasn't fetched in this call (SEV's per-call limits or an empty answer);
-// null when everything was fetched. EmptyAnswer is true when SEV answered the first request with an empty
-// list, which usually means throttling; Meters then holds only cached days, if any.
-public interface IHourlyResult
-{
-    IReadOnlyList<IMeterReadings> Meters { get; }
-    (DateTime From, DateTime To)? NotFetched { get; }
-    bool EmptyAnswer { get; }
-}
-
-// Hourly kWh usage per meter (see IHourlyResult).
-public record UsageResult(
-    IReadOnlyList<MeterUsage> Meters, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer = false) : IHourlyResult
-{
-    IReadOnlyList<IMeterReadings> IHourlyResult.Meters => Meters;
-}
-
-// SEV's estimated hourly cost in DKK per meter (see IHourlyResult).
-public record CostResult(
-    IReadOnlyList<MeterCost> Meters, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer = false) : IHourlyResult
-{
-    IReadOnlyList<IMeterReadings> IHourlyResult.Meters => Meters;
-}
-
-// SEV's estimated hourly CO2 emission in kg per meter (see IHourlyResult).
-public record Co2Result(
-    IReadOnlyList<MeterCo2> Meters, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer = false) : IHourlyResult
-{
-    IReadOnlyList<IMeterReadings> IHourlyResult.Meters => Meters;
 }

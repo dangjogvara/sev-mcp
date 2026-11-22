@@ -1,7 +1,5 @@
 using MyUplink.Client;
-using MyUplink.Client.Models;
 using Sev.Client;
-using Sev.McpServer.Tools;
 
 namespace Sev.McpServer.HeatPump;
 
@@ -60,27 +58,10 @@ public class HeatPumpLogger(IServiceScopeFactory scopes, HeatPumpLog log, TimePr
             foreach (var device in system.Devices ?? [])
             {
                 var points = await myUplink.GetPointsAsync(device.Id, cancellationToken);
-                log.Add(device.Id, device.Product?.Name, hour, Measurements(points));
+                log.Add(device.Id, device.Product?.Name, hour, HeatPumpReadings.ForLog(points));
                 devices++;
             }
         }
         return devices;
     }
-
-    // What's worth logging: named, connected measurements. Settings, coded values (status, mode) and software
-    // versions (numbers, but not measurements) are left out; get_heatpump_status shows them as they are now.
-    public static IReadOnlyList<LoggedReading> Measurements(IReadOnlyList<DataPoint> points) =>
-        points
-            .Where(p => !p.Writable
-                && p.EnumValues is not { Count: > 0 }
-                && p.Value is { } value && value != HeatPumpTools.NotConnected
-                && HeatPumpTools.HasName(p.ParameterName)
-                && !p.ParameterName!.Contains("version", StringComparison.OrdinalIgnoreCase))
-            .Select(p => new LoggedReading(
-                p.ParameterId,
-                p.ParameterName!,
-                string.IsNullOrWhiteSpace(p.ParameterUnit) ? null : p.ParameterUnit,
-                HeatPumpTools.HasName(p.Category) ? p.Category : null,
-                p.Value!.Value))
-            .ToList();
 }
