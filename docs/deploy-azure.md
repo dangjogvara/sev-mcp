@@ -87,6 +87,32 @@ When you connect, Claude opens Microsoft's sign-in page. Sign in with the accoun
 - **New settings:** if an update adds settings, run the setup script again with the same `RESOURCE_GROUP`, `LOCATION` and `APP`. It reuses everything and doesn't create a new client secret.
 - **Package updates:** Dependabot opens PRs for new package versions in this repository, and syncing your fork brings them in. In a fork Dependabot may be off; turn it on under Settings > Code security if you want its PRs there too.
 
+## Your data and your secrets
+
+- Your credentials are app settings in your Azure subscription, and your usage and heat pump data are cached in your App Service (`/home/data/sev-cache`) and backed up to your own storage account. The server only talks to SEV, myUplink and your Claude.
+- A fork of a public repository is public: never commit `.env`, and don't paste keys or client secrets into issues or chats.
+
+## More users in your household
+
+Others can use your server too, with your data. Invite them as guests in your Entra tenant (Entra ID > Users > Invite external user), then add each one's object ID as the next `Auth__AllowedUsers__<n>` app setting (`Auth__AllowedUsers__1`, `__2`, ...). They add the same connector in their own Claude and sign in as themselves.
+
+## Settings reference
+
+The setup script sets these app settings (environment variables). You only need this table to change them by hand or to host the server somewhere else.
+
+| Setting | Example | Purpose |
+|---|---|---|
+| `Sev__User`, `Sev__Key` | from SEV | Your SEV API user name and key. Required. |
+| `Auth__Authority` | `https://login.microsoftonline.com/<tenant-id>/v2.0` | The token issuer (v2 tokens). Without the `Auth` settings the server only accepts local use, and outside Development it refuses to start. |
+| `Auth__Resource` | `https://<app>.azurewebsites.net/mcp` | The public MCP URL, exactly as entered in Claude. |
+| `Auth__Audiences__0` | `<client-id>` | Accepted token audience: the Entra app registration's client ID. |
+| `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
+| `Auth__AllowedUsers__0`, `__1`, ... | `<Entra object ID>` | Who may use the server; anyone else gets 403. |
+| `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
+| `Sev__CacheDirectory` | `/home/data/sev-cache` | Where the cache and the heat pump log are saved so they survive restarts. Optional. |
+| `MyUplink__ClientId`, `MyUplink__ClientSecret` | from dev.myuplink.com | Turn on the heat pump tools and the hourly log ([heat-pump.md](heat-pump.md)). Optional. |
+| `MyUplink__LogHourly` | `false` | Turns the hourly heat pump log off. Optional; on by default. |
+
 ## Troubleshooting
 
 - **Watch the server's log** (startup errors, requests):
