@@ -1,0 +1,27 @@
+# Dependabot opens PRs for new versions of the NuGet packages and the GitHub Actions used here.
+# CI tests each PR; merging one into main deploys it. Minor and patch updates come grouped in one
+# PR per ecosystem a week, majors one PR each, since they may need code changes.
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      nuget-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Their major version follows .NET: 11.x targets net11 and fails to restore on net10 (NU1202).
+      # Move these together with TargetFramework in Directory.Build.props.
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
