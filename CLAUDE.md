@@ -21,7 +21,8 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 - `.env` (gitignored) holds `SEV_USER` and `SEV_KEY` for `Sev.SmokeTest`; nothing loads it automatically, so export it into the shell first. `Sev.SmokeTest` throws at startup if either is missing.
 - `Sev.McpServer` reads credentials from the `Sev` configuration section (`SevOptions`): user-secrets locally (loaded only in the Development environment, which the launch profile sets), `Sev__User` / `Sev__Key` environment variables when hosted. It refuses to start if either is missing.
 - Shared project settings (`TargetFramework`, `Nullable`, `ImplicitUsings`) live in `Directory.Build.props`, not in each `.csproj`.
-- CI (`.github/workflows/ci.yml`) runs `dotnet restore`, `dotnet build` and `dotnet test`.
+- CI (`.github/workflows/ci.yml`) runs `dotnet restore`, `dotnet build` and `dotnet test`. Its `deploy` job then publishes `Sev.McpServer` to Azure App Service on pushes to `main` and manual runs (`gh workflow run ci.yml --ref main`). It runs only when the repository variable `AZURE_WEBAPP_NAME` is set, and logs in with GitHub OIDC through the `production` environment's secrets (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`).
+- Hosting: `deploy/setup-azure.sh` (re-runnable, uses `az` and `gh`) creates the App Service (Linux B1, .NET 10, Always On, startup `dotnet Sev.McpServer.dll`), the Entra app registration Claude logs in with (v2 tokens, `mcp.access` scope, the MCP URL as an Application ID URI, Claude's callback), the app settings, and a deploy identity with a federated credential for the `production` environment. The steps, connecting Claude and troubleshooting are in `docs/deploy-azure.md`. Don't run it or change Azure resources without the user's go-ahead: it creates billed resources.
 
 ## Architecture
 

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets you deploy by hand (Actions tab or `gh workflow run ci.yml`), e.g. right after the Azure setup.
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,3 +21,36 @@ jobs:
       - run: dotnet restore
       - run: dotnet build --no-restore
       - run: dotnet test --no-build
+
+  # Publishes the MCP server to Azure App Service once the tests pass on main. Skipped until
+  # deploy/setup-azure.sh has set the AZURE_WEBAPP_NAME variable (see docs/deploy-azure.md).
+  # Logs in to Azure with GitHub's OIDC token: no stored password, only the IDs in the
+  # "production" environment's secrets.
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.AZURE_WEBAPP_NAME != ''
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - run: dotnet publish Sev.McpServer --configuration Release --output publish
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: publish

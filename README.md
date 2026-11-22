@@ -75,7 +75,7 @@ Settings for the hosted mode, as environment variables:
 | `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
 
-Setting up the Entra app registration and the Azure App Service is described when deployment is added.
+[docs/deploy-azure.md](docs/deploy-azure.md) explains how to host it on Azure App Service. A setup script creates the Entra app registration and these settings, and GitHub Actions deploys `main`.
 
 ## Project structure
 
