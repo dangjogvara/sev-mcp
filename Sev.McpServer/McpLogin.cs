@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using ModelContextProtocol.AspNetCore.Authentication;
@@ -33,7 +34,7 @@ public static class McpLogin
         {
             throw new InvalidOperationException(
                 "No Auth configuration: outside Development the server requires a login. Set Auth:Authority, Auth:Resource, " +
-                "Auth:Audiences and Auth:AllowedUsers (see README).");
+                "Auth:Audiences, Auth:Scopes and Auth:AllowedUsers (see README).");
         }
         return auth;
     }
@@ -85,9 +86,11 @@ public static class McpLogin
                 options.ResourceMetadata = metadata;
             });
 
+        var requiredScopes = auth.Scopes.Select(AuthOptions.ShortScopeName).ToHashSet(StringComparer.Ordinal);
         services.AddAuthorization(options => options.AddPolicy(AllowedUsersPolicy, policy => policy
             .RequireAuthenticatedUser()
-            .RequireClaim("oid", auth.AllowedUsers)));
+            .RequireClaim("oid", auth.AllowedUsers)
+            .RequireAssertion(context => HasRequiredScope(context.User, requiredScopes))));
 
         // App Service ends HTTPS at its front end and forwards plain HTTP with X-Forwarded-Proto: https.
         // Honouring it makes the metadata URL in the 401 challenge start with https, as Claude requires.
@@ -100,4 +103,10 @@ public static class McpLogin
             options.KnownProxies.Clear();
         });
     }
+
+    // Entra sends granted delegated scopes as a space-delimited "scp" claim.
+    private static bool HasRequiredScope(ClaimsPrincipal user, HashSet<string> requiredScopes) =>
+        user.FindAll("scp")
+            .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .Any(requiredScopes.Contains);
 }

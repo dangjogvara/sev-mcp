@@ -90,6 +90,30 @@ public class LoginTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("other.scope")]
+    [InlineData("mcp.access.extra")]
+    public async Task TokenWithoutRequiredScope_IsForbidden(string? scope)
+    {
+        using var factory = Server(withAuth: true);
+
+        var response = await factory.CreateClient().SendAsync(InitializeRequest(Token(AllowedUser, scope: scope)));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TokenWithMultipleScopesIncludingRequired_CanUseMcp()
+    {
+        using var factory = Server(withAuth: true);
+
+        var response = await factory.CreateClient().SendAsync(InitializeRequest(Token(AllowedUser, scope: "openid mcp.access profile")));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
     [InlineData("wrong-audience", Issuer)]
     [InlineData(Audience, "https://login.example.com/other-tenant/v2.0")]
     public async Task TokenForAnotherApiOrIssuer_IsRejected(string audience, string issuer)
@@ -175,16 +199,22 @@ public class LoginTests
                 }));
         });
 
-    private static string Token(string oid, string audience = Audience, string issuer = Issuer, DateTime? expires = null)
+    private static string Token(
+        string oid, string audience = Audience, string issuer = Issuer, DateTime? expires = null, string? scope = "mcp.access")
     {
         var expiry = expires ?? DateTime.UtcNow.AddHours(1);
+        var claims = new Dictionary<string, object> { ["oid"] = oid };
+        if (scope is not null)
+        {
+            claims["scp"] = scope;
+        }
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
             Issuer = issuer,
             Audience = audience,
             NotBefore = expiry.AddHours(-2),
             Expires = expiry,
-            Claims = new Dictionary<string, object> { ["oid"] = oid, ["scp"] = "mcp.access" },
+            Claims = claims,
             SigningCredentials = new SigningCredentials(Key, SecurityAlgorithms.HmacSha256),
         });
     }
