@@ -161,6 +161,8 @@ settings = {
     "Auth__Scopes__0": f"api://{e['APP_ID']}/{e['SCOPE_NAME']}",
     "Auth__AllowedUsers__0": e["USER_OID"],
     "AllowedHosts": e["HOST"],
+    # /home survives restarts and deploys; /home/site/wwwroot is replaced by every deploy.
+    "Sev__CacheDirectory": "/home/data/sev-cache",
 }
 json.dump([{"name": k, "value": v, "slotSetting": False} for k, v in settings.items()], open(sys.argv[1], "w"))
 PY

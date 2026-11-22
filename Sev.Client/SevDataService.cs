@@ -8,6 +8,7 @@ namespace Sev.Client;
 //   complete, or old enough that SEV won't add to them (SevCache.DaysUntilFinal), gaps included.
 //   Both go through GetHourlyAsync, which holds the fetching and caching logic once for any hourly series.
 // - Empty answers are never cached: SEV returns them when the rate limit is exceeded.
+// - With SevCacheFiles, whatever is newly cached is saved to disk before the call returns.
 // Only what can exist is fetched: nothing from the current hour on, and nothing outside a meter's
 // install and removal dates (from the cached meter list). Whatever isn't cached is fetched in pieces of
 // at most MaxDaysPerRequest days (SEV silently cuts off longer requests), newest first, and at most
@@ -38,6 +39,7 @@ public class SevDataService(SevClient sev, SevCache cache)
             {
                 cache.Meters = customers;
                 cache.MetersFetchedAt = now;
+                cache.Files?.SaveMeters(customers, now);
             }
             return customers;
         }
@@ -128,9 +130,16 @@ public class SevDataService(SevClient sev, SevCache cache)
             var fetchEnd = to < currentHour ? to : currentHour;
 
             var missing = MissingDays(cachedDays, meters, from, fetchEnd);
+            var cachedBefore = cachedDays.Count;
             var outcome = missing.Count > 0
                 ? await FetchMissingAsync(cachedDays, missing, from, fetchEnd, today, fetch)
                 : new FetchOutcome<TReading>([], null, false);
+
+            // Days are only ever added, so a higher count means something new to save.
+            if (cachedDays.Count > cachedBefore)
+            {
+                cache.Files?.SaveDays(cachedDays);
+            }
 
             var days = DaysIn(from, to);
             var result = meters
