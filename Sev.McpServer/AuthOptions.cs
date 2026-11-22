@@ -27,6 +27,19 @@ public class AuthOptions
 
     public bool Enabled => !string.IsNullOrWhiteSpace(Authority);
 
+    // Entra metadata lists full URI scopes (api://<client-id>/mcp.access), while v2 access tokens
+    // put the short scope name (mcp.access) in the "scp" claim.
+    public static string ShortScopeName(string? scope)
+    {
+        if (string.IsNullOrWhiteSpace(scope))
+        {
+            return "";
+        }
+        var trimmed = scope.Trim();
+        var slash = trimmed.LastIndexOf('/');
+        return slash >= 0 ? trimmed[(slash + 1)..] : trimmed;
+    }
+
     // What's wrong with an enabled configuration, in words; empty when it can be used.
     public IReadOnlyList<string> Validate()
     {
@@ -39,11 +52,15 @@ public class AuthOptions
         {
             problems.Add("Auth:Resource must be the public https MCP URL without a trailing slash, e.g. https://<app>.azurewebsites.net/mcp.");
         }
-        if (Audiences.Length == 0)
+        if (Audiences.Length == 0 || Audiences.Any(string.IsNullOrWhiteSpace))
         {
             problems.Add("Auth:Audiences needs at least one accepted token audience (the API app registration's client ID).");
         }
-        if (AllowedUsers.Length == 0)
+        if (Scopes.Length == 0 || Scopes.Any(s => string.IsNullOrWhiteSpace(ShortScopeName(s))))
+        {
+            problems.Add("Auth:Scopes needs at least one scope (e.g. api://<client-id>/mcp.access).");
+        }
+        if (AllowedUsers.Length == 0 || AllowedUsers.Any(string.IsNullOrWhiteSpace))
         {
             problems.Add("Auth:AllowedUsers needs at least one Entra object ID; otherwise nobody could use the server.");
         }
