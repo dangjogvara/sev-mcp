@@ -140,6 +140,49 @@ public class SevClientTests
         Assert.Empty(_handler.Requests);
     }
 
+    [Fact]
+    public async Task GetEstimatedCo2Async_PostsRequestWithLocalDates()
+    {
+        _handler.Respond("[]");
+
+        await _client.GetEstimatedCo2Async([1111, 2222], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        var request = Assert.Single(_handler.Requests);
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Equal(BaseAddress + "estimated_CO2", request.Uri.ToString());
+        Assert.Equal(
+            """{"meters":[1111,2222],"from_date":"2026-10-10T00:00:00","to_date":"2026-10-11T00:00:00"}""",
+            request.Body);
+    }
+
+    [Fact]
+    public async Task GetEstimatedCo2Async_MapsAllFields()
+    {
+        _handler.RespondWithFixture("estimated_co2.json");
+
+        var co2 = await _client.GetEstimatedCo2Async([1111, 2222], new DateTime(2026, 10, 10), new DateTime(2026, 10, 11));
+
+        Assert.Equal(2, co2.Count);
+        var meter = co2[0];
+        Assert.Equal("2222", meter.MeterId);
+        Assert.Equal(3, meter.Readings.Count);
+
+        var reading = meter.Readings[1];
+        Assert.Equal(new DateTime(2026, 10, 10, 1, 0, 0), reading.TimeStamp);
+        Assert.Equal(DateTimeKind.Unspecified, reading.TimeStamp.Kind);
+        Assert.Equal(0.4833089999986543m, reading.Value);
+        Assert.Equal("Kg CO2", reading.Unit);
+    }
+
+    [Fact]
+    public async Task GetEstimatedCo2Async_RejectsInvalidRangeWithoutCallingApi()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _client.GetEstimatedCo2Async([1111], new DateTime(2026, 10, 11), new DateTime(2026, 10, 10)));
+
+        Assert.Empty(_handler.Requests);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("https://api.sev.fo/api/CustomerRESTApi")]

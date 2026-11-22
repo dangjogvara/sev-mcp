@@ -309,6 +309,25 @@ public class UsageToolsTests
         Assert.Contains("missing", meter.Note);
     }
 
+    // --- CO2 ---
+
+    [Fact]
+    public void Summarize_Co2_UsesSevUnitAndRoundsToTwoDecimals()
+    {
+        var readings = Enumerable.Range(0, 24)
+            .Select(h => new Co2Reading(Day(2026, 10, 10).AddHours(h), 0.4833089999986543m, "Kg CO2"))
+            .ToList();
+
+        var meter = Assert.Single(UsageTools.Summarize(
+            [Heat], [new MeterCo2("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
+            defaultUnit: "Kg CO2", decimals: 2));
+
+        Assert.Equal("Kg CO2", meter.Unit);
+        Assert.Equal(11.6m, meter.Total);
+        Assert.Equal(0, meter.MissingHours);
+        Assert.Equal([new UsagePeriod("2026-10-10", 11.6m, null)], meter.Periods);
+    }
+
     // --- Meters installed or removed within the range ---
 
     [Fact]

@@ -31,4 +31,6 @@ public class SevCache(TimeProvider? timeProvider = null)
     internal Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<UsageReading>> UsageDays { get; } = [];
 
     internal Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<CostReading>> CostDays { get; } = [];
+
+    internal Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<Co2Reading>> Co2Days { get; } = [];
 }

@@ -1,0 +1,36 @@
+[
+  {
+    "meter_id": "2222",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 0.6105231,
+        "cumulative_value": null,
+        "unit": "Kg CO2"
+      },
+      {
+        "time_stamp": "2026-10-10T01:00:00",
+        "reading": 0.4833089999986543,
+        "cumulative_value": null,
+        "unit": "Kg CO2"
+      },
+      {
+        "time_stamp": "2026-10-10T02:00:00",
+        "reading": 0.504467,
+        "cumulative_value": null,
+        "unit": "Kg CO2"
+      }
+    ]
+  },
+  {
+    "meter_id": "1111",
+    "readings": [
+      {
+        "time_stamp": "2026-10-10T00:00:00",
+        "reading": 0.746765,
+        "cumulative_value": null,
+        "unit": "Kg CO2"
+      }
+    ]
+  }
+]

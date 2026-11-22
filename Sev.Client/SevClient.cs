@@ -58,6 +58,21 @@ public class SevClient
         return cost ?? [];
     }
 
+    // SEV's estimate of the CO2 emitted for the electricity used, per hour, in kg. Same request as hourly_kwh_usage.
+    // Per SEV's documentation: (1 - the hour's green share of production) * kWh * 0.641 kg CO2/kWh.
+    public async Task<IReadOnlyList<MeterCo2>> GetEstimatedCo2Async(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        ValidateRange(from, to);
+        var request = new UsageRequest(meterIds, from, to);
+
+        using var response = await _http.PostAsJsonAsync("estimated_CO2", request, JsonOptions, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var co2 = await response.Content.ReadFromJsonAsync<List<MeterCo2>>(JsonOptions, cancellationToken);
+        return co2 ?? [];
+    }
+
     // The API works in local Faroese time and serializes DateTime as-is, so a Utc or Local
     // DateTime would be sent with "Z" or an offset and shift the requested hours.
     internal static void ValidateRange(DateTime from, DateTime to)

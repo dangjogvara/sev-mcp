@@ -468,6 +468,38 @@ public class SevDataServiceTests
         Assert.Empty(result.Meters);
     }
 
+    // --- CO2: same fetching and caching as usage, in its own cache ---
+
+    [Fact]
+    public async Task Co2_PastDaysComeFromCacheTheSecondTime()
+    {
+        _handler.Respond(Co2Json((1111, Day(-2), 24)));
+
+        var first = await _data.GetEstimatedCo2Async([1111], Start(Day(-2)), Start(Day(-1)));
+        var second = await _data.GetEstimatedCo2Async([1111], Start(Day(-2)), Start(Day(-1)));
+
+        var request = Assert.Single(_handler.Requests);
+        Assert.EndsWith("estimated_CO2", request.Uri.ToString());
+        Assert.Equal(24, first.Meters.Single().Readings.Count);
+        Assert.Equal(first.Meters.Single().Readings, second.Meters.Single().Readings);
+    }
+
+    [Fact]
+    public async Task Co2_IsCachedSeparatelyFromUsageAndCost()
+    {
+        _handler.Respond(UsageJson((1111, Day(-2), 24)));
+        _handler.Respond(CostJson((1111, Day(-2), 24)));
+        _handler.Respond(Co2Json((1111, Day(-2), 24)));
+
+        await UsageAsync([1111], Start(Day(-2)), Start(Day(-1)));
+        await _data.GetEstimatedCostAsync([1111], Start(Day(-2)), Start(Day(-1)));
+        var co2 = await _data.GetEstimatedCo2Async([1111], Start(Day(-2)), Start(Day(-1)));
+
+        Assert.Equal(3, _handler.Requests.Count);
+        Assert.EndsWith("estimated_CO2", _handler.Requests[2].Uri.ToString());
+        Assert.All(co2.Meters.Single().Readings, r => Assert.Equal("Kg CO2", r.Unit));
+    }
+
     // For tests that only look at the readings, not at what wasn't fetched.
     private async Task<IReadOnlyList<MeterUsage>> UsageAsync(IReadOnlyList<int> meterIds, DateTime from, DateTime to) =>
         (await _data.GetHourlyUsageAsync(meterIds, from, to)).Meters;
@@ -539,6 +571,25 @@ public class SevDataServiceTests
                     unit = "DKR",
                     price_unit = 1.825m,
                     tarif = 310,
+                })),
+            });
+        return JsonSerializer.Serialize(meters);
+    }
+
+    // An estimated_CO2 response with `hours` readings of 0.5 kg CO2 from 00:00 for each (meter, day).
+    private static string Co2Json(params (int Meter, DateOnly Day, int Hours)[] parts)
+    {
+        var meters = parts
+            .GroupBy(p => p.Meter)
+            .Select(g => new
+            {
+                meter_id = g.Key.ToString(),
+                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours).Select(h => new
+                {
+                    time_stamp = Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture),
+                    reading = 0.5m,
+                    cumulative_value = (decimal?)null,
+                    unit = "Kg CO2",
                 })),
             });
         return JsonSerializer.Serialize(meters);

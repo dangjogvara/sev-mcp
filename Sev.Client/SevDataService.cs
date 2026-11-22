@@ -4,7 +4,7 @@ namespace Sev.Client;
 
 // Same data as SevClient, but served from SevCache where possible, to save SEV's 10 calls per 5 minutes.
 // - The meter list is kept for SevCache.MeterListLifetime.
-// - Usage and cost are kept per meter per day, but only for days before today (Faroese time) that are
+// - Usage, cost and CO2 are kept per meter per day, but only for days before today (Faroese time) that are
 //   complete, or old enough that SEV won't add to them (SevCache.DaysUntilFinal), gaps included.
 //   Both go through GetHourlyAsync, which holds the fetching and caching logic once for any hourly series.
 // - Empty answers are never cached: SEV returns them when the rate limit is exceeded.
@@ -73,6 +73,20 @@ public class SevDataService(SevClient sev, SevCache cache)
 
         var meters = data.Meters.Select(m => new MeterCost(m.MeterId, m.Readings)).ToList();
         return new CostResult(meters, data.NotFetched, data.EmptyAnswer);
+    }
+
+    public async Task<Co2Result> GetEstimatedCo2Async(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    {
+        var data = await GetHourlyAsync(
+            cache.Co2Days, meterIds, from, to,
+            async (ids, pieceFrom, pieceTo) =>
+                (await sev.GetEstimatedCo2Async(ids, pieceFrom, pieceTo, cancellationToken))
+                    .Select(m => (m.MeterId, m.Readings)).ToList(),
+            cancellationToken);
+
+        var meters = data.Meters.Select(m => new MeterCo2(m.MeterId, m.Readings)).ToList();
+        return new Co2Result(meters, data.NotFetched, data.EmptyAnswer);
     }
 
     // One meter's readings as SEV returns them, for any kind of hourly reading.
@@ -308,7 +322,7 @@ public class SevDataService(SevClient sev, SevCache cache)
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 }
 
-// What UsageResult and CostResult have in common, so the MCP tools can handle both the same way.
+// What UsageResult, CostResult and Co2Result have in common, so the MCP tools can handle both the same way.
 // Meters holds the readings within the requested range: SEV's answer plus cached days. NotFetched is the
 // oldest part of the range that wasn't fetched in this call (SEV's per-call limits or an empty answer);
 // null when everything was fetched. EmptyAnswer is true when SEV answered the first request with an empty
@@ -330,6 +344,13 @@ public record UsageResult(
 // SEV's estimated hourly cost in DKK per meter (see IHourlyResult).
 public record CostResult(
     IReadOnlyList<MeterCost> Meters, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer = false) : IHourlyResult
+{
+    IReadOnlyList<IMeterReadings> IHourlyResult.Meters => Meters;
+}
+
+// SEV's estimated hourly CO2 emission in kg per meter (see IHourlyResult).
+public record Co2Result(
+    IReadOnlyList<MeterCo2> Meters, (DateTime From, DateTime To)? NotFetched, bool EmptyAnswer = false) : IHourlyResult
 {
     IReadOnlyList<IMeterReadings> IHourlyResult.Meters => Meters;
 }

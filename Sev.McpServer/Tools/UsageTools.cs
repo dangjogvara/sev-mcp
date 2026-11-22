@@ -63,7 +63,28 @@ public class UsageTools(SevDataService sev)
             async (ids, fromTime, toTime) => await sev.GetEstimatedCostAsync(ids, fromTime, toTime, cancellationToken),
             defaultUnit: "DKR", decimals: 2, cancellationToken);
 
-    // What get_usage and get_cost share: check the arguments, pick the meters, fetch the hourly series
+    [McpServerTool(Name = "get_co2", Title = "Get estimated CO2 emissions", ReadOnly = true, Idempotent = true)]
+    [Description(
+        "Gets SEV's estimated CO2 emissions in kg (unit 'Kg CO2') for the electricity used, per hour, day or month for the " +
+        "user's meters, with a total per meter. SEV estimates each hour as (1 - that hour's green share of production) * kWh * " +
+        "0.641 kg CO2/kWh, so hours when the grid runs on wind, water or sun count less. It is an indicative estimate. " +
+        "Arguments, limits and missing-data reporting are the same as for get_usage: times are local Faroese time, " +
+        "the range is [from, to), and long periods may come back partly fetched with a note to ask again in a few minutes. " +
+        "CO2 uses the same SEV call budget as get_usage and get_cost (10 calls per 5 minutes). Completed past days are cached. " +
+        "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
+        "don't report it as zero emissions or as a complete total.")]
+    public Task<IReadOnlyList<MeterUsageResult>> GetCo2Async(
+        [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
+        [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
+        [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
+        [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
+        CancellationToken cancellationToken = default) =>
+        GetHourlySeriesAsync(
+            from, to, granularity, meters,
+            async (ids, fromTime, toTime) => await sev.GetEstimatedCo2Async(ids, fromTime, toTime, cancellationToken),
+            defaultUnit: "Kg CO2", decimals: 2, cancellationToken);
+
+    // What get_usage, get_cost and get_co2 share: check the arguments, pick the meters, fetch the hourly series
     // with `fetch`, and summarize it. defaultUnit is used when no reading says its unit; decimals is the rounding.
     private Task<IReadOnlyList<MeterUsageResult>> GetHourlySeriesAsync(
         string from,
@@ -176,7 +197,7 @@ public class UsageTools(SevDataService sev)
     // range isn't reported as missing data before it was there.
     // notFetched is the part of the range SevDataService didn't get to in this call; missing hours there
     // are reported as "not fetched yet" rather than as missing data.
-    // Works for any hourly series (kWh usage, DKK cost): defaultUnit is used when there are no readings to
+    // Works for any hourly series (kWh usage, DKK cost, kg CO2): defaultUnit is used when there are no readings to
     // take the unit from, and values are rounded to `decimals` places.
     public static IReadOnlyList<MeterUsageResult> Summarize(
         IReadOnlyList<MeterSummary> meters, IReadOnlyList<IMeterReadings> usage, DateTime from, DateTime to, DateTime localNow,

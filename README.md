@@ -13,8 +13,9 @@ This is an unofficial, personal project. It isn't made or endorsed by SEV.
 | `list_meters` | Lists the meters on your SEV account, with address and install/removal dates. |
 | `get_usage` | Electricity use in kWh per hour, day or month for a period, with a total per meter. Meters can be picked by ID, nickname, meter name or part of the address; leave them out to get all active meters. |
 | `get_cost` | SEV's estimated cost of the electricity used, in DKK, per hour, day or month, with a total per meter. Same arguments as `get_usage`. It's an estimate and may differ from your bill. |
+| `get_co2` | SEV's estimated CO2 emissions for the electricity used, in kg, per hour, day or month, with a total per meter. Same arguments as `get_usage`. SEV bases each hour on how much of the grid's power came from renewable sources that hour. |
 
-`get_usage` and `get_cost` take `from` and `to` (a date like `2026-10-10`, or a date and time like `2026-10-10T06:00`, in Faroese local time; `to` is not included) and `granularity` (`hour`, `day` or `month`). A call can cover at most 31 days by hour, 366 days by day, or 731 days by month.
+`get_usage`, `get_cost` and `get_co2` take `from` and `to` (a date like `2026-10-10`, or a date and time like `2026-10-10T06:00`, in Faroese local time; `to` is not included) and `granularity` (`hour`, `day` or `month`). A call can cover at most 31 days by hour, 366 days by day, or 731 days by month.
 
 Missing data is never shown as zero. When SEV has no reading for some hours, the result says how many are missing, and the total is `null` if there are no readings at all.
 
@@ -65,7 +66,7 @@ The server has **no authentication**, so it only accepts requests from the same 
 | Project | Purpose |
 |---|---|
 | `Sev.Client` | Class library for SEV's API: the client, login and token handling, rate limiting, and the cache. |
-| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage` and `get_cost` tools. |
+| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage`, `get_cost` and `get_co2` tools. |
 | `Sev.Client.Tests`, `Sev.McpServer.Tests` | xUnit tests. They never call the real API. |
 | `Sev.SmokeTest` | A small console app that logs in and prints meters and one day of usage from the live API. |
 
