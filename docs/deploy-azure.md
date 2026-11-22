@@ -28,6 +28,8 @@ Settings can be changed with environment variables. The most likely one is the a
 APP=sev-mcp-yourname LOCATION=northeurope ./deploy/setup-azure.sh
 ```
 
+If you change `RESOURCE_GROUP` or `LOCATION`, pass the same values every time you run the script, and use your group name wherever the commands below say `sev-mcp` after `-g` or `--name`. An existing resource group is reused wherever it is, so running again with another `LOCATION` (after a quota error) creates the plan and app in the new region.
+
 What it does:
 
 1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the cache and rate-limit count survive), TLS 1.2 and FTP disabled.
@@ -79,6 +81,8 @@ When you connect, Claude opens Microsoft's sign-in page. Sign in with the accoun
   ```bash
   az webapp log tail -g sev-mcp -n <app>
   ```
+- **"Operation cannot be completed without additional quota" (B1 limit 0):** new subscriptions often have no App Service quota in some regions. Either request 1 B1 instance at https://aka.ms/azure-quota (provider App Service, your region) and run the script again, or run it again in another region, e.g. `LOCATION=swedencentral ./deploy/setup-azure.sh`.
+- **The deploy job fails at "Azure login" with AADSTS700213 ("No matching federated identity record"):** the deploy identity trusts a different token subject than GitHub sends. The log shows the subject GitHub sent (`subject claim - repo:...`). Repositories with GitHub's immutable, ID-based subjects send `repo:<owner>@<id>/<repo>@<id>:environment:production`; the script reads the right form from GitHub and fixes an existing credential, so running it again (with the same settings) is enough. Then rerun the failed job.
 - **The server doesn't start:** look for "Invalid Auth configuration" or "requires a login" in the log. One of the `Auth__` app settings is missing or wrong. Re-running the script sets them again.
 - **AADSTS9010010 or `invalid_target` during sign-in:** Entra doesn't recognise the `resource` Claude sent. Check that the app registration's Application ID URIs include the MCP URL exactly (no trailing slash), and that `requestedAccessTokenVersion` is 2 in its manifest.
 - **The script fails at "Application ID URI":** your tenant has a policy against non-verified URIs. Check that the token version really is 2 (the exemption depends on it), or ask your tenant admin about an exemption.

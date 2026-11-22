@@ -4,6 +4,7 @@
 # Run from the repository root, logged in with `az login` and `gh auth login`:
 #   ./deploy/setup-azure.sh
 # Settings can be changed with environment variables, e.g. APP=my-sev-mcp ./deploy/setup-azure.sh
+# Use the same ones every time you run it (RESOURCE_GROUP in particular), or it sets up a second copy.
 #
 # It's safe to run again: existing resources are reused, and settings are brought up to date.
 # It creates a client secret for Claude only the first time (the Entra app is new); see the guide
@@ -60,13 +61,23 @@ echo "You (allowed user): $(az ad signed-in-user show --query userPrincipalName 
 
 # --- App Service ---------------------------------------------------------------------------
 
-step "Resource group '$RESOURCE_GROUP' in $LOCATION"
-az group create --name "$RESOURCE_GROUP" --location "$LOCATION" -o none
+step "Resource group '$RESOURCE_GROUP'"
+# An existing group is reused wherever it is: a group's own region doesn't limit where its resources
+# go, so running again with another LOCATION (after a quota error, say) works.
+if az group show --name "$RESOURCE_GROUP" -o none 2>/dev/null; then
+  echo "Exists (in $(az group show --name "$RESOURCE_GROUP" --query location -o tsv))."
+else
+  az group create --name "$RESOURCE_GROUP" --location "$LOCATION" -o none
+fi
 
 step "App Service plan '$PLAN' ($SKU, Linux)"
 if ! az appservice plan show -g "$RESOURCE_GROUP" -n "$PLAN" -o none 2>/dev/null; then
-  az appservice plan create -g "$RESOURCE_GROUP" -n "$PLAN" --sku "$SKU" --is-linux -o none
+  az appservice plan create -g "$RESOURCE_GROUP" -n "$PLAN" --sku "$SKU" --is-linux --location "$LOCATION" -o none \
+    || fail "Couldn't create the plan in $LOCATION. If Azure says the $SKU quota is 0, request more at
+       https://aka.ms/azure-quota (provider App Service), or run again in another region, e.g.
+       LOCATION=swedencentral ./deploy/setup-azure.sh. See Troubleshooting in docs/deploy-azure.md."
 fi
+echo "In $(az appservice plan show -g "$RESOURCE_GROUP" -n "$PLAN" --query location -o tsv)."
 
 step "Web app '$APP' (.NET 10)"
 if ! az webapp show -g "$RESOURCE_GROUP" -n "$APP" -o none 2>/dev/null; then
@@ -163,11 +174,25 @@ az identity create -g "$RESOURCE_GROUP" -n "$DEPLOY_IDENTITY" -o none
 DEPLOY_CLIENT_ID="$(az identity show -g "$RESOURCE_GROUP" -n "$DEPLOY_IDENTITY" --query clientId -o tsv)"
 DEPLOY_PRINCIPAL_ID="$(az identity show -g "$RESOURCE_GROUP" -n "$DEPLOY_IDENTITY" --query principalId -o tsv)"
 # Trusts GitHub's OIDC tokens for jobs in this repo's "production" environment, and nothing else.
-if ! az identity federated-credential show -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
-    -n github-production -o none 2>/dev/null; then
-  az identity federated-credential create -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
+# The token's subject starts with repo:<owner>/<repo>, or with repo:<owner>@<id>/<repo>@<id> when the
+# repository uses GitHub's immutable, ID-based subjects (newer repositories do). GitHub reports which.
+if [[ -z "${OIDC_SUBJECT:-}" ]]; then
+  OIDC_PREFIX="$(gh api "repos/$GITHUB_REPO/actions/oidc/customization/sub" \
+    --jq "if .use_default == false then \"\" else (.sub_claim_prefix // \"repo:$GITHUB_REPO\") end")"
+  [[ -n "$OIDC_PREFIX" ]] || fail "This repository has a custom OIDC subject template. Set OIDC_SUBJECT to the
+       subject its production jobs get (the deploy log shows it) and run again."
+  OIDC_SUBJECT="$OIDC_PREFIX:environment:production"
+fi
+echo "Trusted subject: $OIDC_SUBJECT"
+CURRENT_SUBJECT="$(az identity federated-credential show -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
+  -n github-production --query subject -o tsv 2>/dev/null || true)"
+if [[ "$CURRENT_SUBJECT" != "$OIDC_SUBJECT" ]]; then
+  # Creates the credential, or replaces an out-of-date subject on an existing one.
+  verb=create
+  [[ -z "$CURRENT_SUBJECT" ]] || verb=update
+  az identity federated-credential "$verb" -g "$RESOURCE_GROUP" --identity-name "$DEPLOY_IDENTITY" \
     -n github-production --issuer https://token.actions.githubusercontent.com \
-    --subject "repo:$GITHUB_REPO:environment:production" --audiences api://AzureADTokenExchange -o none
+    --subject "$OIDC_SUBJECT" --audiences api://AzureADTokenExchange -o none
 fi
 WEBAPP_ID="$(az webapp show -g "$RESOURCE_GROUP" -n "$APP" --query id -o tsv)"
 retry az role assignment create --assignee-object-id "$DEPLOY_PRINCIPAL_ID" \
