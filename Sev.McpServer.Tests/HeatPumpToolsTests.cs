@@ -109,6 +109,15 @@ public class HeatPumpToolsTests
 
         Assert.Contains("get_usage", names);
         Assert.DoesNotContain("get_heatpump_status", names);
+        Assert.DoesNotContain("get_heatpump_history", names);
+    }
+
+    [Fact]
+    public void LogHourlyOff_NoBackgroundLogger()
+    {
+        using var factory = Server(clientId: "client-id", clientSecret: "client-secret");
+
+        Assert.DoesNotContain(factory.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), s => s is HeatPump.HeatPumpLogger);
     }
 
     [Fact]
@@ -120,6 +129,7 @@ public class HeatPumpToolsTests
 
         Assert.Contains("get_usage", names);
         Assert.Contains("get_heatpump_status", names);
+        Assert.Contains("get_heatpump_history", names);
     }
 
     [Fact]
@@ -147,5 +157,7 @@ public class HeatPumpToolsTests
             builder.UseSetting("Sev:Key", "test-key");
             builder.UseSetting("MyUplink:ClientId", clientId);
             builder.UseSetting("MyUplink:ClientSecret", clientSecret);
+            // The hourly logger would call myUplink as soon as the server starts.
+            builder.UseSetting("MyUplink:LogHourly", "false");
         });
 }

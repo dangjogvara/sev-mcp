@@ -25,7 +25,8 @@ Optional, only when myUplink is configured (see below):
 
 | Tool | What it does |
 |---|---|
-| `get_heatpump_status` | The heat pump's current state: outdoor, heating and hot water temperatures, what it's doing, compressor speed, settings such as setpoints, and active alarms. Current values only, read-only. |
+| `get_heatpump_status` | The heat pump's current state: outdoor, heating and hot water temperatures, what it's doing, compressor speed, settings such as setpoints, and active alarms. Read-only. |
+| `get_heatpump_history` | Past readings (outdoor temperature by default, or any other measurement) per hour, day or month, from the server's own hourly log. Takes the same `from`, `to` and `granularity` as `get_usage`, so it lines up with electricity use. |
 
 ## Getting started
 
@@ -64,7 +65,9 @@ dotnet user-secrets set "MyUplink:ClientId" "<client id>" --project Sev.McpServe
 dotnet user-secrets set "MyUplink:ClientSecret" "<client secret>" --project Sev.McpServer
 ```
 
-Hosted, use the environment variables `MyUplink__ClientId` and `MyUplink__ClientSecret`. Without them there's no `get_heatpump_status` tool and nothing else changes. The server only reads (scope `READSYSTEM`), and myUplink allows 25 calls per minute. myUplink's history endpoints refused access in testing, so only current values are available.
+Hosted, use the environment variables `MyUplink__ClientId` and `MyUplink__ClientSecret`. Without them there's no `get_heatpump_status` tool and nothing else changes. The server only reads (scope `READSYSTEM`), and myUplink allows 25 calls per minute.
+
+myUplink doesn't give its history to apps (its history endpoints answered 403 with either kind of login), so the server logs the heat pump's measurements itself once an hour, about 2 myUplink calls each time. `get_heatpump_history` reads that log, so it only goes back to when logging started. With `Sev__CacheDirectory` set, the log is kept there (`HeatPumpLog-<year>-<month>.json`) and survives restarts; otherwise it's lost when the server stops. Set `MyUplink__LogHourly` to `false` to turn logging off.
 
 ## Working within SEV's limits
 
@@ -94,7 +97,7 @@ Settings for the hosted mode, as environment variables:
 | `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
 | `Sev__CacheDirectory` | `/home/data/sev-cache` | Where the cache is saved so it survives restarts. Optional. |
-| `MyUplink__ClientId`, `MyUplink__ClientSecret` | `<from dev.myuplink.com>` | Turns on the heat pump tool. Optional. |
+| `MyUplink__ClientId`, `MyUplink__ClientSecret` | `<from dev.myuplink.com>` | Turns on the heat pump tools and the hourly log. Optional. |
 
 [docs/deploy-azure.md](docs/deploy-azure.md) explains how to host it on Azure App Service. A setup script creates the Entra app registration and these settings, and GitHub Actions deploys `main`.
 
@@ -104,7 +107,7 @@ Settings for the hosted mode, as environment variables:
 |---|---|
 | `Sev.Client` | Class library for SEV's API: the client, login and token handling, rate limiting, and the cache. |
 | `MyUplink.Client` | Class library for myUplink's API (heat pumps): login and reading systems, current values and alarms. |
-| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage`, `get_cost` and `get_co2` tools, and `get_heatpump_status` when myUplink is configured. |
+| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) with the `list_meters`, `get_usage`, `get_cost` and `get_co2` tools, and `get_heatpump_status` / `get_heatpump_history` plus the hourly heat pump log when myUplink is configured. |
 | `Sev.Client.Tests`, `MyUplink.Client.Tests`, `Sev.McpServer.Tests` | xUnit tests. They never call the real APIs. |
 | `Sev.SmokeTest` | A small console app that logs in and prints meters and one day of usage from the live API. |
 

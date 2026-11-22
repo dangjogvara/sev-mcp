@@ -21,7 +21,7 @@ public class HeatPumpTools(MyUplinkClient myUplink)
         "Gets the current state of the user's heat pump(s) through myUplink: temperatures (outdoor, heating flow and return, " +
         "hot water), what the heat pump is doing (status), compressor speed, immersion heater, settings such as setpoints " +
         "(marked setting: true), and active alarms. Outdoor temperature is the heat pump's own sensor. " +
-        "Values are current, not history; past values aren't available. Electricity use comes from get_usage, not from here. " +
+        "Values are current; past readings come from get_heatpump_history. Electricity use comes from get_usage, not from here. " +
         "Read-only: it can't change settings. Values are grouped by the manufacturer's categories, in their English names.")]
     public Task<IReadOnlyList<HeatPumpSystemResult>> GetHeatPumpStatusAsync(CancellationToken cancellationToken) =>
         CallAsync<IReadOnlyList<HeatPumpSystemResult>>(async () =>
@@ -78,7 +78,7 @@ public class HeatPumpTools(MyUplinkClient myUplink)
 
     // Some firmware lacks English texts, and myUplink then sends "Text not found: id[], fw[...], lang[en-GB]"
     // as the name of the parameter or of its category.
-    private static bool HasName(string? name) =>
+    internal static bool HasName(string? name) =>
         !string.IsNullOrWhiteSpace(name) && !name.StartsWith("Text not found", StringComparison.Ordinal);
 
     private static HeatPumpValue ToValue(DataPoint point)

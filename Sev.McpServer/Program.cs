@@ -33,7 +33,7 @@ var mcp = builder.Services
     .WithTools<UsageTools>(toolJsonOptions);
 if (heatPump)
 {
-    mcp.WithTools<HeatPumpTools>(toolJsonOptions);
+    mcp.WithTools<HeatPumpTools>(toolJsonOptions).WithTools<HeatPumpHistoryTools>(toolJsonOptions);
 }
 
 var app = builder.Build();
