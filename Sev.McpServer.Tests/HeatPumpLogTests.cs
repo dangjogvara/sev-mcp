@@ -89,7 +89,7 @@ public class HeatPumpLogTests : IDisposable
         var points = new[]
         {
             Point("62000", "Outdoor Temperature", 5, "°C"),
-            Point("62003", "Hot water flow temp", HeatPumpTools.NotConnected, "°C"),
+            Point("62003", "Hot water flow temp", HeatPumpReadings.NotConnected, "°C"),
             Point("61502", "Hot water setpoint", 50, "°C", writable: true),
             Point("62005", "Status", 4, labels: [new EnumValue("4", "HC")]),
             Point("62002", "Text not found: id[], fw[CTC-01-01], lang[en-GB]", 0),
@@ -97,7 +97,7 @@ public class HeatPumpLogTests : IDisposable
             Point("62244", "Software version", 20230301),
         };
 
-        var readings = HeatPumpLogger.Measurements(points);
+        var readings = HeatPumpReadings.ForLog(points);
 
         Assert.Equal(["62000", "62193"], readings.Select(r => r.ParameterId));
         Assert.Null(readings[1].Unit);

@@ -1,14 +1,6 @@
-using Sev.Client;
 using Sev.Client.Models;
 
 namespace Sev.McpServer.Tools;
-
-public enum Granularity
-{
-    Hour,
-    Day,
-    Month,
-}
 
 // Turns hourly readings (usage, cost or CO2) into the totals and periods the tools return, and works out
 // which hours should have a reading, so missing data is reported as missing and never as zero.
@@ -27,7 +19,7 @@ public static class HourlySummary
         IReadOnlyList<MeterSummary> meters, IReadOnlyList<IMeterReadings> usage, DateTime from, DateTime to, DateTime localNow,
         Granularity granularity, (DateTime From, DateTime To)? notFetched = null, string defaultUnit = "kWh", int decimals = 3)
     {
-        var rangeHours = ExpectedHours(from, to, localNow);
+        var rangeHours = Periods.ExpectedHours(from, to, localNow);
         var byMeter = usage.ToDictionary(m => m.MeterId);
 
         return meters
@@ -101,8 +93,8 @@ public static class HourlySummary
 
         // A period is listed if it has readings or expected hours; its value is null without readings.
         // Readings and expected hours are grouped by period once, then each period is looked up.
-        var readingsByPeriod = readings.ToLookup(r => PeriodKey(r.TimeStamp, granularity));
-        var expectedByPeriod = expectedHours.ToLookup(h => PeriodKey(h, granularity));
+        var readingsByPeriod = readings.ToLookup(r => Periods.Key(r.TimeStamp, granularity));
+        var expectedByPeriod = expectedHours.ToLookup(h => Periods.Key(h, granularity));
         var periods = expectedByPeriod.Select(g => g.Key)
             .Union(readingsByPeriod.Select(g => g.Key))
             .Order(StringComparer.Ordinal)
@@ -139,32 +131,6 @@ public static class HourlySummary
             (null, { } removed) => $"removed {removed:yyyy-MM-dd}",
             _ => "no install date",
         };
-
-    // ISO-style keys sort chronologically as strings.
-    internal static string PeriodKey(DateTime time, Granularity granularity) => granularity switch
-    {
-        Granularity.Hour => time.ToString("yyyy-MM-dd'T'HH:mm"),
-        Granularity.Day => time.ToString("yyyy-MM-dd"),
-        _ => time.ToString("yyyy-MM"),
-    };
-
-    // The local hour starts in [from, to) that should have a reading by now: hours that have ended,
-    // skipping the hour that doesn't exist when summer time starts. On the day summer time ends the
-    // repeated hour has the same local label, so it is expected once.
-    public static IReadOnlyList<DateTime> ExpectedHours(DateTime from, DateTime to, DateTime localNow)
-    {
-        var currentHour = SevTime.StartOfHour(localNow);
-        var end = to < currentHour ? to : currentHour;
-        var hours = new List<DateTime>();
-        for (var hour = SevTime.StartOfHour(from); hour < end; hour = hour.AddHours(1))
-        {
-            if (hour >= from && !SevTime.Zone.IsInvalidTime(hour))
-            {
-                hours.Add(hour);
-            }
-        }
-        return hours;
-    }
 }
 
 // One meter's summary of an hourly series (kWh, DKK or kg CO2, see Unit). Total is null when the meter has

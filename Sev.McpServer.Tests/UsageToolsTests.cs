@@ -23,7 +23,7 @@ public class UsageToolsTests
     [InlineData("MONTH", Granularity.Month)]
     public void ParseGranularity_IgnoresCase(string input, Granularity expected)
     {
-        Assert.Equal(expected, UsageTools.ParseGranularity(input));
+        Assert.Equal(expected, Periods.ParseGranularity(input));
     }
 
     [Theory]
@@ -32,7 +32,7 @@ public class UsageToolsTests
     [InlineData("1")]
     public void ParseGranularity_RejectsUnknown(string input)
     {
-        var ex = Assert.Throws<McpException>(() => UsageTools.ParseGranularity(input));
+        var ex = Assert.Throws<McpException>(() => Periods.ParseGranularity(input));
 
         Assert.Contains("'hour', 'day' or 'month'", ex.Message);
     }
@@ -40,7 +40,7 @@ public class UsageToolsTests
     [Fact]
     public void ParseRange_ConvertsBothEnds()
     {
-        var (from, to) = UsageTools.ParseRange("2026-07-14", "2026-07-15T00:00:00+01:00", Granularity.Day);
+        var (from, to) = Periods.ParseRange("2026-07-14", "2026-07-15T00:00:00+01:00", Granularity.Day);
 
         Assert.Equal(new DateTime(2026, 7, 14), from);
         Assert.Equal(new DateTime(2026, 7, 15), to);
@@ -54,9 +54,9 @@ public class UsageToolsTests
     [InlineData(Granularity.Month, "2024-11-21", "2026-11-22")]
     public void ParseRange_AllowsExactlyMaxRange(Granularity granularity, string from, string to)
     {
-        var (fromTime, toTime) = UsageTools.ParseRange(from, to, granularity);
+        var (fromTime, toTime) = Periods.ParseRange(from, to, granularity);
 
-        Assert.Equal(UsageTools.MaxRange(granularity), toTime - fromTime);
+        Assert.Equal(Periods.MaxRange(granularity), toTime - fromTime);
     }
 
     [Theory]
@@ -69,7 +69,7 @@ public class UsageToolsTests
     [InlineData("2024-11-21", "2026-11-22T01:00", Granularity.Month, "731 days")]
     public void ParseRange_RejectsInvalidArgumentsWithHelpfulMessage(string from, string to, Granularity granularity, string expectedInMessage)
     {
-        var ex = Assert.Throws<McpException>(() => UsageTools.ParseRange(from, to, granularity));
+        var ex = Assert.Throws<McpException>(() => Periods.ParseRange(from, to, granularity));
 
         Assert.Contains(expectedInMessage, ex.Message);
     }
@@ -398,7 +398,7 @@ public class UsageToolsTests
     [InlineData(2026, 10, 10, 24)]
     public void ExpectedHours_FollowFaroeseClock(int year, int month, int day, int expected)
     {
-        var hours = HourlySummary.ExpectedHours(Day(year, month, day), Day(year, month, day).AddDays(1), Later);
+        var hours = Periods.ExpectedHours(Day(year, month, day), Day(year, month, day).AddDays(1), Later);
 
         Assert.Equal(expected, hours.Count);
         Assert.Equal(expected, hours.Distinct().Count());
@@ -407,7 +407,7 @@ public class UsageToolsTests
     [Fact]
     public void ExpectedHours_PartialHourAtStartIsNotExpected()
     {
-        var hours = HourlySummary.ExpectedHours(
+        var hours = Periods.ExpectedHours(
             new DateTime(2026, 10, 10, 6, 30, 0), new DateTime(2026, 10, 10, 9, 0, 0), Later);
 
         Assert.Equal([new DateTime(2026, 10, 10, 7, 0, 0), new DateTime(2026, 10, 10, 8, 0, 0)], hours);

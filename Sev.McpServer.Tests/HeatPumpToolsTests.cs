@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using MyUplink.Client;
 using MyUplink.Client.Models;
+using Sev.McpServer.HeatPump;
 using Sev.McpServer.Tools;
 
 namespace Sev.McpServer.Tests;
@@ -26,7 +27,7 @@ public class HeatPumpToolsTests
         var points = new[]
         {
             Point("62000", "Outdoor Temperature", "General", 3.5, "°C"),
-            Point("62003", "Hot water flow temp", "Hot water", HeatPumpTools.NotConnected, "°C"),
+            Point("62003", "Hot water flow temp", "Hot water", HeatPumpReadings.NotConnected, "°C"),
             Point("62276", "Hot water tank temp", "Hot water", 52, "°C"),
             Point("62002", "Text not found: id[], fw[CTC-01-01], lang[en-GB]", "Text not found: id[], fw[CTC-01-01], lang[en-GB]", 0),
             Point("62193", "RPS", "Heat pump 1", 42),
@@ -93,7 +94,7 @@ public class HeatPumpToolsTests
     [InlineData(HttpStatusCode.TooManyRequests, "30 seconds")]
     public void Describe_ExplainsFailures(HttpStatusCode status, string expected)
     {
-        var message = HeatPumpTools.Describe(new MyUplinkApiException(status, "", TimeSpan.FromSeconds(29.5)));
+        var message = HeatPumpToolErrors.Describe(new MyUplinkApiException(status, "", TimeSpan.FromSeconds(29.5)));
 
         Assert.Contains(expected, message);
     }
@@ -117,7 +118,7 @@ public class HeatPumpToolsTests
     {
         using var factory = Server(clientId: "client-id", clientSecret: "client-secret");
 
-        Assert.DoesNotContain(factory.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), s => s is HeatPump.HeatPumpLogger);
+        Assert.DoesNotContain(factory.Services.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), s => s is HeatPumpLogger);
     }
 
     [Fact]

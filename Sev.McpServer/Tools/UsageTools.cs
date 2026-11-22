@@ -96,8 +96,8 @@ public class UsageTools(SevDataService sev)
         int decimals,
         CancellationToken cancellationToken)
     {
-        var bucket = ParseGranularity(granularity);
-        var (fromTime, toTime) = ParseRange(from, to, bucket);
+        var bucket = Periods.ParseGranularity(granularity);
+        var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
         return SevToolErrors.CallAsync(async () =>
         {
             var available = SevToolErrors.ThrowIfEmpty(MeterTools.Summarize(await sev.GetAvailableMetersAsync(cancellationToken)));
@@ -108,53 +108,6 @@ public class UsageTools(SevDataService sev)
                 selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched,
                 defaultUnit, decimals);
         });
-    }
-
-    public static TimeSpan MaxRange(Granularity granularity) => granularity switch
-    {
-        // Hourly values for longer periods would flood Claude's context (about 720 per meter per month).
-        Granularity.Hour => TimeSpan.FromDays(31),
-        Granularity.Day => TimeSpan.FromDays(366),
-        _ => TimeSpan.FromDays(731),
-    };
-
-    // Matches the names only; Enum.TryParse would also accept numbers like "1".
-    public static Granularity ParseGranularity(string? granularity)
-    {
-        foreach (var value in Enum.GetValues<Granularity>())
-        {
-            if (string.Equals(value.ToString(), granularity?.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return value;
-            }
-        }
-        throw new McpException($"Unknown granularity '{granularity}'. Use 'hour', 'day' or 'month'.");
-    }
-
-    // Validates the dates; McpException messages are shown to Claude so it can correct the call.
-    public static (DateTime From, DateTime To) ParseRange(string from, string to, Granularity granularity)
-    {
-        if (!FaroeseTime.TryParse(from, out var fromTime))
-        {
-            throw new McpException($"Could not read 'from' ({from}). Use a date like 2026-10-10 or a date-time like 2026-10-10T06:00.");
-        }
-        if (!FaroeseTime.TryParse(to, out var toTime))
-        {
-            throw new McpException($"Could not read 'to' ({to}). Use a date like 2026-10-11 or a date-time like 2026-10-11T06:00.");
-        }
-        if (fromTime >= toTime)
-        {
-            throw new McpException($"'from' ({fromTime:yyyy-MM-dd HH:mm}) must be before 'to' ({toTime:yyyy-MM-dd HH:mm}); 'to' is not included.");
-        }
-        var maxRange = MaxRange(granularity);
-        if (toTime - fromTime > maxRange)
-        {
-            throw new McpException(
-                $"Granularity '{granularity.ToString().ToLowerInvariant()}' is limited to {maxRange.TotalDays} days per call. " +
-                "Use a shorter period or a coarser granularity ('day' or 'month').");
-        }
-
-        return (fromTime, toTime);
     }
 
     // Matches each requested item against meter ID, nickname, meter name or address (case-insensitive;

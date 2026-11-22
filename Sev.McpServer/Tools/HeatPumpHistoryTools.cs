@@ -29,8 +29,8 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         [Description("Reading names or parts of names, e.g. 'Outdoor Temperature', 'Primary flow temp', or 'all'. Default: outdoor temperature.")]
         string[]? parameters = null)
     {
-        var bucket = UsageTools.ParseGranularity(granularity);
-        var (fromTime, toTime) = UsageTools.ParseRange(from, to, bucket);
+        var bucket = Periods.ParseGranularity(granularity);
+        var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
         return Summarize(log.Snapshot(), fromTime, toTime, SevTime.LocalNow(time), bucket, parameters);
     }
 
@@ -56,34 +56,11 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         var loggedFrom = device.Samples.Min(s => s.Hour);
         var start = from > loggedFrom ? from : loggedFrom;
         // The current hour counts once its sample is taken, so "now" is the end of this hour.
-        var expected = start < to ? HourlySummary.ExpectedHours(start, to, localNow.AddHours(1)) : [];
+        var expected = start < to ? Periods.ExpectedHours(start, to, localNow.AddHours(1)) : [];
         var samples = device.Samples.Where(s => s.Hour >= from && s.Hour < to).ToDictionary(s => s.Hour);
 
-        var series = selected.Select(parameter =>
-        {
-            var expectedByPeriod = expected.ToLookup(h => HourlySummary.PeriodKey(h, granularity));
-            var valuesByPeriod = samples.Values
-                .Where(s => s.Values.ContainsKey(parameter.Id))
-                .ToLookup(s => HourlySummary.PeriodKey(s.Hour, granularity), s => s.Values[parameter.Id]);
-            var periods = expectedByPeriod.Select(g => g.Key)
-                .Union(valuesByPeriod.Select(g => g.Key))
-                .Order(StringComparer.Ordinal)
-                .Select(key =>
-                {
-                    var values = valuesByPeriod[key].ToList();
-                    var missing = expectedByPeriod[key].Count(h => !(samples.TryGetValue(h, out var s) && s.Values.ContainsKey(parameter.Id)));
-                    var missingHours = missing > 0 ? missing : (int?)null;
-                    if (values.Count == 0)
-                    {
-                        return new HeatPumpPeriod(key, null, null, null, null, missingHours);
-                    }
-                    return granularity == Granularity.Hour
-                        ? new HeatPumpPeriod(key, Round(values[0]), null, null, null, missingHours)
-                        : new HeatPumpPeriod(key, null, Round(values.Average()), Round(values.Min()), Round(values.Max()), missingHours);
-                })
-                .ToList();
-            return new HeatPumpSeries(parameter.Name, parameter.Unit, parameter.Category, periods);
-        }).ToList();
+        var expectedByPeriod = expected.ToLookup(h => Periods.Key(h, granularity));
+        var series = selected.Select(parameter => SummarizeSeries(parameter, samples, expectedByPeriod, granularity)).ToList();
 
         var notes = new List<string>();
         if (from < loggedFrom)
@@ -102,6 +79,36 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
             granularity.ToString().ToLowerInvariant(),
             notes.Count > 0 ? string.Join(" ", notes) : null,
             series);
+    }
+
+    // One reading per period: its value (per hour) or average, min and max (per day or month), and how many
+    // expected hours have no sample with this reading.
+    private static HeatPumpSeries SummarizeSeries(
+        LoggedParameter parameter,
+        Dictionary<DateTime, LoggedSample> samples,
+        ILookup<string, DateTime> expectedByPeriod,
+        Granularity granularity)
+    {
+        bool HasValue(DateTime hour) => samples.TryGetValue(hour, out var s) && s.Values.ContainsKey(parameter.Id);
+
+        var valuesByPeriod = samples.Values
+            .Where(s => s.Values.ContainsKey(parameter.Id))
+            .ToLookup(s => Periods.Key(s.Hour, granularity), s => s.Values[parameter.Id]);
+
+        var periods = expectedByPeriod.Select(g => g.Key)
+            .Union(valuesByPeriod.Select(g => g.Key))
+            .Order(StringComparer.Ordinal)
+            .Select(key =>
+            {
+                var values = valuesByPeriod[key].ToList();
+                var missing = expectedByPeriod[key].Count(h => !HasValue(h));
+                var missingHours = missing > 0 ? missing : (int?)null;
+                return values.Count == 0 ? new HeatPumpPeriod(key, null, null, null, null, missingHours)
+                    : granularity == Granularity.Hour ? new HeatPumpPeriod(key, Round(values[0]), null, null, null, missingHours)
+                    : new HeatPumpPeriod(key, null, Round(values.Average()), Round(values.Min()), Round(values.Max()), missingHours);
+            })
+            .ToList();
+        return new HeatPumpSeries(parameter.Name, parameter.Unit, parameter.Category, periods);
     }
 
     // No names: outdoor temperature (every reading with "outdoor" in its name), or everything if there's none.
