@@ -6,6 +6,19 @@ namespace Sev.McpServer;
 // a localhost page (e.g. the MCP Inspector). Hosting will need authentication and its own list.
 public static class LocalOrigin
 {
+    // Against DNS rebinding: a web page in the user's browser must not reach the unauthenticated local server.
+    // AllowedHosts (appsettings.json) rejects foreign Host headers; this rejects cross-site Origin headers.
+    public static IApplicationBuilder UseLocalOriginsOnly(this IApplicationBuilder app) =>
+        app.Use(async (context, next) =>
+        {
+            if (!IsAllowed(context.Request.Headers.Origin))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            await next(context);
+        });
+
     public static bool IsAllowed(string? origin)
     {
         if (string.IsNullOrEmpty(origin))
