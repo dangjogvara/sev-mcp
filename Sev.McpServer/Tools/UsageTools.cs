@@ -16,6 +16,13 @@ public enum Granularity
 [McpServerToolType]
 public class UsageTools(SevDataService sev)
 {
+    // The arguments get_usage, get_cost and get_co2 share, described once.
+    private const string FromDescription = "Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.";
+    private const string ToDescription = "End, exclusive. A date (2026-10-11) or date-time in Faroese local time.";
+    private const string GranularityDescription = "'hour', 'day' (default) or 'month'.";
+    private const string MetersDescription =
+        "Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.";
+
     [McpServerTool(Name = "get_usage", Title = "Get electricity usage", ReadOnly = true, Idempotent = true)]
     [Description(
         "Gets electricity consumption in kWh per hour, day or month for the user's meters, with a total per meter. " +
@@ -31,10 +38,10 @@ public class UsageTools(SevDataService sev)
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero usage or as a complete total.")]
     public Task<IReadOnlyList<MeterUsageResult>> GetUsageAsync(
-        [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
-        [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
-        [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
-        [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
+        [Description(FromDescription)] string from,
+        [Description(ToDescription)] string to,
+        [Description(GranularityDescription)] string granularity = "day",
+        [Description(MetersDescription)] string[]? meters = null,
         CancellationToken cancellationToken = default) =>
         GetHourlySeriesAsync(
             from, to, granularity, meters,
@@ -53,10 +60,10 @@ public class UsageTools(SevDataService sev)
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero cost or as a complete total.")]
     public Task<IReadOnlyList<MeterUsageResult>> GetCostAsync(
-        [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
-        [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
-        [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
-        [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
+        [Description(FromDescription)] string from,
+        [Description(ToDescription)] string to,
+        [Description(GranularityDescription)] string granularity = "day",
+        [Description(MetersDescription)] string[]? meters = null,
         CancellationToken cancellationToken = default) =>
         GetHourlySeriesAsync(
             from, to, granularity, meters,
@@ -74,10 +81,10 @@ public class UsageTools(SevDataService sev)
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero emissions or as a complete total.")]
     public Task<IReadOnlyList<MeterUsageResult>> GetCo2Async(
-        [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
-        [Description("End, exclusive. A date (2026-10-11) or date-time in Faroese local time.")] string to,
-        [Description("'hour', 'day' (default) or 'month'.")] string granularity = "day",
-        [Description("Meters by ID, nickname, meter name or part of the address, as listed by list_meters. Leave out for all active meters.")] string[]? meters = null,
+        [Description(FromDescription)] string from,
+        [Description(ToDescription)] string to,
+        [Description(GranularityDescription)] string granularity = "day",
+        [Description(MetersDescription)] string[]? meters = null,
         CancellationToken cancellationToken = default) =>
         GetHourlySeriesAsync(
             from, to, granularity, meters,
@@ -327,7 +334,7 @@ public class UsageTools(SevDataService sev)
     // repeated hour has the same local label, so it is expected once.
     public static IReadOnlyList<DateTime> ExpectedHours(DateTime from, DateTime to, DateTime localNow)
     {
-        var currentHour = new DateTime(localNow.Year, localNow.Month, localNow.Day, localNow.Hour, 0, 0);
+        var currentHour = SevTime.StartOfHour(localNow);
         var end = to < currentHour ? to : currentHour;
         var hours = new List<DateTime>();
         for (var hour = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0); hour < end; hour = hour.AddHours(1))

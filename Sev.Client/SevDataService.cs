@@ -119,7 +119,7 @@ public class SevDataService(SevClient sev, SevCache cache)
 
             // A reading is stamped with the start of its hour and exists only once the hour has ended, so
             // nothing from the current hour on is fetched. A range in the future therefore costs no call.
-            var currentHour = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0);
+            var currentHour = SevTime.StartOfHour(now);
             var fetchEnd = to < currentHour ? to : currentHour;
             var knownMeters = (cache.Meters ?? [])
                 .SelectMany(c => c.Installations)
