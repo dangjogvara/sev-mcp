@@ -145,6 +145,7 @@ public static class HourlySummary
 // One meter's summary of an hourly series (kWh, DKK or kg CO2, see Unit). Total is null when the meter has
 // no readings. MissingHours counts expected hours without a reading; Note explains either case in words.
 // Periods are hours, days or months depending on Granularity.
+// Prices is only set by get_cost: the meter's price per kWh over the period (see CostPrices).
 public record MeterSeriesResult(
     int MeterId,
     string MeterName,
@@ -154,7 +155,8 @@ public record MeterSeriesResult(
     int MissingHours,
     string? Note,
     string Granularity,
-    IReadOnlyList<SeriesPeriod> Periods);
+    IReadOnlyList<SeriesPeriod> Periods,
+    IReadOnlyList<PricePeriod>? Prices = null);
 
 // Period is "2026-10-10T05:00" (hour start), "2026-10-10" (day) or "2026-10" (month), in Faroese local time.
 // Value is null when the period has no readings; MissingHours is null when none are missing.
