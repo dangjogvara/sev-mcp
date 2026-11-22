@@ -26,7 +26,7 @@ public static class HeatPumpToolErrors
             "myUplink rejected the server's application credentials (MyUplink client ID or secret), or refused access. They need to be checked.",
         HttpStatusCode.TooManyRequests =>
             "myUplink allows 25 calls per minute and they are used up."
-            + (ex.RetryAfter is { } wait ? $" Try again in {Math.Ceiling(wait.TotalSeconds)} seconds." : " Try again in a minute."),
+            + (ex.RetryAfter is { } wait && wait > TimeSpan.Zero ? $" Try again in {Math.Ceiling(wait.TotalSeconds)} seconds." : " Try again in a minute."),
         _ => ex.Message,
     };
 }

@@ -6,6 +6,8 @@ public class SevRateLimitHandler(SevRateLimiter limiter) : DelegatingHandler
 {
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        // A request that's already cancelled won't be sent, so it mustn't use one of the 10 calls.
+        cancellationToken.ThrowIfCancellationRequested();
         if (!limiter.TryAcquire(out var retryAfter))
         {
             throw new SevRateLimitExceededException(retryAfter);

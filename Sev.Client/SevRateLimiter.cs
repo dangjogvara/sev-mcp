@@ -17,9 +17,11 @@ public class SevRateLimiter
 
     public SevRateLimiter(TimeProvider? timeProvider = null, int maxCalls = DefaultMaxCalls, TimeSpan? window = null)
     {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCalls);
         _time = timeProvider ?? TimeProvider.System;
         _maxCalls = maxCalls;
         _window = window ?? DefaultWindow;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(_window, TimeSpan.Zero, nameof(window));
     }
 
     // Records a call and returns true if it is within the limit. Otherwise records nothing and

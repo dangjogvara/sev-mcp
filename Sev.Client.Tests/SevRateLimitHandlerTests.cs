@@ -62,6 +62,23 @@ public class SevRateLimitHandlerTests
     }
 
     [Fact]
+    public async Task CancelledRequest_DoesNotUseACall()
+    {
+        // The handler on its own, with room for one call.
+        var limiter = new SevRateLimiter(_time, maxCalls: 1);
+        var network = new FakeHttpMessageHandler();
+        network.Respond("[]");
+        using var invoker = new HttpMessageInvoker(new SevRateLimitHandler(limiter) { InnerHandler = network });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            invoker.SendAsync(new HttpRequestMessage(HttpMethod.Post, "https://example.com/"), new CancellationToken(canceled: true)));
+        using var response = await invoker.SendAsync(new HttpRequestMessage(HttpMethod.Post, "https://example.com/"), CancellationToken.None);
+
+        Assert.Single(network.Requests);
+        Assert.False(limiter.TryAcquire(out _));
+    }
+
+    [Fact]
     public async Task AllowedAgainAfterWindow()
     {
         _apiHandler.Respond("[]");

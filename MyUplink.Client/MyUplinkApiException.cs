@@ -24,7 +24,8 @@ public class MyUplinkApiException(HttpStatusCode statusCode, string responseBody
     {
         if (response.Headers.RetryAfter is { } retry)
         {
-            return retry.Delta ?? (retry.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+            // A date may already be past: then no wait, not a negative one.
+            return retry.Delta ?? (retry.Date is { } date ? (date - DateTimeOffset.UtcNow is var wait && wait > TimeSpan.Zero ? wait : TimeSpan.Zero) : null);
         }
         // myUplink's own header: seconds until its rate-limit window resets.
         return response.Headers.TryGetValues("ratelimit-reset", out var values)

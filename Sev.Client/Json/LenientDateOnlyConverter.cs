@@ -26,10 +26,11 @@ internal class LenientDateOnlyConverter : JsonConverter<DateOnly?>
             return date;
         }
 
-        // RoundtripKind keeps the date as written instead of converting "...Z" to the machine's local time.
-        if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dateTime))
+        // DateTimeOffset keeps the date and time as written, whatever the offset ("...Z", "+02:00"); DateTime would
+        // convert an explicit offset to the machine's own time zone and could move it to another day.
+        if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var dateTime))
         {
-            return DateOnly.FromDateTime(dateTime);
+            return DateOnly.FromDateTime(dateTime.DateTime);
         }
 
         return null;
