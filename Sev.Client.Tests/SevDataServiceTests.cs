@@ -409,6 +409,96 @@ public class SevDataServiceTests
         AssertRequest(_handler.Requests[1], [1111], Start(Day(-40)), Start(Day(-30)));
     }
 
+    [Fact]
+    public async Task Usage_LongRangeIncludingToday_MakesProgressAcrossCalls()
+    {
+        // Call 1: 6 pieces newest-first covering Day(-185)..Today 12:00.
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-30), 30).Concat([(1111, Today, 12)]).ToArray()));
+        for (var piece = 1; piece < SevDataService.MaxRequestsPerCall; piece++)
+        {
+            _handler.Respond(UsageJson(DaysOf(1111, Day(-30 - 31 * piece), 31)));
+        }
+
+        // Call 2: Today (never cached) plus the remaining 3 older pieces, skipping the 185 cached days.
+        _handler.Respond(UsageJson((1111, Today, 12)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-216), 31)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-247), 31)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-248), 1)));
+
+        var first = await _data.GetHourlyUsageAsync([1111], Start(Day(-248)), Start(Today.AddDays(1)));
+
+        Assert.Equal(SevDataService.MaxRequestsPerCall, _handler.Requests.Count);
+        Assert.Equal((Start(Day(-248)), Start(Day(-185))), first.NotFetched);
+        Assert.Equal(185 * 24 + 12, first.Meters.Single().Readings.Count);
+
+        var second = await _data.GetHourlyUsageAsync([1111], Start(Day(-248)), Start(Today.AddDays(1)));
+
+        Assert.Equal(10, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[6], [1111], Start(Today), Start(Today).AddHours(12));
+        AssertRequest(_handler.Requests[7], [1111], Start(Day(-216)), Start(Day(-185)));
+        AssertRequest(_handler.Requests[8], [1111], Start(Day(-247)), Start(Day(-216)));
+        AssertRequest(_handler.Requests[9], [1111], Start(Day(-248)), Start(Day(-247)));
+        Assert.Null(second.NotFetched);
+        Assert.Equal(248 * 24 + 12, second.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_CachedMiddleStretch_IsSkippedWhenFetchingOlderAndNewerGaps()
+    {
+        // Pre-cache Day(-45)..Day(-5) (41 days, fetched in 2 pieces).
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-35), 31)));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-45), 10)));
+        await UsageAsync([1111], Start(Day(-45)), Start(Day(-4)));
+
+        // Query Day(-50)..Today: only the newer gap and older gap are fetched.
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-4), 4).Concat([(1111, Today, 12)]).ToArray()));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-50), 5)));
+
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-50)), Start(Today.AddDays(1)));
+
+        Assert.Equal(4, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[2], [1111], Start(Day(-4)), Start(Today).AddHours(12));
+        AssertRequest(_handler.Requests[3], [1111], Start(Day(-50)), Start(Day(-45)));
+        Assert.Null(result.NotFetched);
+        Assert.Equal(50 * 24 + 12, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_ShortCachedGapWithin31Days_IsFetchedInOneCall()
+    {
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-5), 1)));
+        await UsageAsync([1111], Start(Day(-5)), Start(Day(-4)));
+
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-10), 10)));
+        var result = await _data.GetHourlyUsageAsync([1111], Start(Day(-10)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[1], [1111], Start(Day(-10)), Start(Today));
+        Assert.Equal(10 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_MixedInstallDates_DoesNotCacheEmptyDaysBeforeNewerMeterInstall()
+    {
+        await LoadMetersAsync((1111, Day(-20), null), (2222, Day(-10), null));
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-15), 7).Concat(DaysOf(2222, Day(-10), 2)).ToArray()));
+
+        await _data.GetHourlyUsageAsync([1111, 2222], Start(Day(-15)), Start(Day(-8)));
+
+        // If the meter list later reports an earlier install date for 2222, its pre-install days must not
+        // have been cached as empty when 1111 fetched that range.
+        _time.Advance(SevCache.MeterListLifetime);
+        await LoadMetersAsync((1111, Day(-20), null), (2222, Day(-20), null));
+        _handler.Respond(UsageJson(DaysOf(2222, Day(-15), 5)));
+
+        var second = await _data.GetHourlyUsageAsync([1111, 2222], Start(Day(-15)), Start(Day(-8)));
+
+        Assert.Equal(4, _handler.Requests.Count);
+        AssertRequest(_handler.Requests[3], [2222], Start(Day(-15)), Start(Day(-10)));
+        Assert.Equal(7 * 24, second.Meters[0].Readings.Count);
+        Assert.Equal(7 * 24, second.Meters[1].Readings.Count);
+    }
+
     // --- Cost: same fetching and caching as usage, in its own cache ---
 
     [Fact]
