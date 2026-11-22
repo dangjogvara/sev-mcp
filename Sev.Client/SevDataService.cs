@@ -167,10 +167,11 @@ public class SevDataService(SevClient sev, SevCache cache)
             select (Meter: meter, Day: day)).ToList();
     }
 
-    // Fetches the missing days from SEV in pieces of at most MaxDaysPerRequest days, newest first, and caches
-    // the days that are done. Missing past days are fetched as whole days so they can be cached; today up to
-    // the current hour. It stops after MaxRequestsPerCall pieces, at a rate-limit refusal after the first piece,
-    // or at an empty answer (most likely the rate limit), and reports the older part it didn't get to.
+    // Fetches the missing days from SEV in pieces of at most MaxDaysPerRequest days, newest first, skipping
+    // stretches where every requested meter is already cached. Missing past days are fetched as whole days
+    // so they can be cached; today up to the current hour. It stops after MaxRequestsPerCall pieces, at a
+    // rate-limit refusal after the first piece, or at an empty answer (most likely the rate limit), and reports
+    // the older part it didn't get to.
     private static async Task<FetchOutcome<TReading>> FetchMissingAsync<TReading>(
         Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<TReading>> cachedDays,
         List<(int Meter, DateOnly Day)> missing,
@@ -180,41 +181,44 @@ public class SevDataService(SevClient sev, SevCache cache)
         FetchPiece<TReading> fetch)
         where TReading : IHourlyReading
     {
-        var first = missing.Min(m => m.Day);
-        var last = missing.Max(m => m.Day);
-        var todayStart = today.ToDateTime(TimeOnly.MinValue);
-        var fetchFrom = first == today ? Max(from, todayStart) : first.ToDateTime(TimeOnly.MinValue);
-        var fetchTo = last == today ? fetchEnd : last.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        var fetchMeters = missing.Select(m => m.Meter).Distinct().ToList();
+        var missingSet = missing.ToHashSet();
+        var missingDays = missing.Select(m => m.Day).Distinct().Order().ToList();
+        var pieces = PiecesNewestFirst(missingDays, from, fetchEnd, today);
+        var notFetchedFrom = pieces[^1].From;
 
         var fetched = new Dictionary<int, List<TReading>>();
-        var pieces = PiecesNewestFirst(fetchFrom, fetchTo);
         for (var i = 0; i < pieces.Count; i++)
         {
-            var (pieceFrom, pieceTo) = pieces[i];
+            var (lo, hi, pieceFrom, pieceTo) = pieces[i];
             // Every earlier piece got an answer: an empty one ends the loop.
             var anyAnswer = i > 0;
             if (i >= MaxRequestsPerCall)
             {
-                return new FetchOutcome<TReading>(fetched, (fetchFrom, pieceTo), false);
+                return new FetchOutcome<TReading>(fetched, (notFetchedFrom, pieceTo), false);
             }
+
+            var pieceMeters = missing
+                .Where(m => m.Day >= lo && m.Day <= hi)
+                .Select(m => m.Meter)
+                .Distinct()
+                .ToList();
 
             List<MeterReadings<TReading>> answer;
             try
             {
-                answer = await fetch(fetchMeters, pieceFrom, pieceTo);
+                answer = await fetch(pieceMeters, pieceFrom, pieceTo);
             }
             catch (SevRateLimitExceededException) when (anyAnswer)
             {
                 // Keep what was fetched; the rest is reported as not fetched.
-                return new FetchOutcome<TReading>(fetched, (fetchFrom, pieceTo), false);
+                return new FetchOutcome<TReading>(fetched, (notFetchedFrom, pieceTo), false);
             }
 
             if (answer.Count == 0)
             {
                 // Most likely the rate limit. Cached days are still returned and the rest is reported as not
                 // fetched; EmptyAnswer tells the caller when SEV gave nothing at all.
-                return new FetchOutcome<TReading>(fetched, (fetchFrom, pieceTo), EmptyAnswer: !anyAnswer);
+                return new FetchOutcome<TReading>(fetched, (notFetchedFrom, pieceTo), EmptyAnswer: !anyAnswer);
             }
 
             foreach (var meterReadings in answer)
@@ -228,7 +232,7 @@ public class SevDataService(SevClient sev, SevCache cache)
                     list.AddRange(meterReadings.Readings);
                 }
             }
-            StoreDays(cachedDays, fetchMeters, answer, today, pieceFrom, pieceTo);
+            StoreDays(cachedDays, pieceMeters, missingSet, answer, today, pieceFrom, pieceTo);
         }
         return new FetchOutcome<TReading>(fetched, null, false);
     }
@@ -239,12 +243,13 @@ public class SevDataService(SevClient sev, SevCache cache)
         !records.Any()
         || records.Any(m => (m.InstallDate is null || day >= m.InstallDate) && (m.RemovalDate is null || day <= m.RemovalDate));
 
-    // Caches the past days that lie wholly inside the piece, for every meter that was asked for: complete
-    // days, and incomplete ones (even without any readings) once they are old enough to be final. Only
-    // called for a non-empty answer, so a meter or day missing from it really has no data at SEV.
+    // Caches the missing past days that lie wholly inside the piece: complete days, and incomplete ones
+    // (even without any readings) once they are old enough to be final. Only called for a non-empty answer,
+    // so a meter or day missing from it really has no data at SEV.
     private static void StoreDays<TReading>(
         Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<TReading>> cachedDays,
         IReadOnlyList<int> meters,
+        HashSet<(int Meter, DateOnly Day)> missingSet,
         List<MeterReadings<TReading>> answer,
         DateOnly today,
         DateTime pieceFrom,
@@ -270,6 +275,10 @@ public class SevDataService(SevClient sev, SevCache cache)
 
             foreach (var meter in meters)
             {
+                if (!missingSet.Contains((meter, day)))
+                {
+                    continue;
+                }
                 var readings = byMeterAndDay[(meter.ToString(), day)].OrderBy(r => r.TimeStamp).ToList();
                 if (readings.Count >= SevCache.MinReadingsForCompleteDay || day < finalBefore)
                 {
@@ -327,20 +336,30 @@ public class SevDataService(SevClient sev, SevCache cache)
         return days;
     }
 
-    // Splits [from, to) into pieces of at most MaxDaysPerRequest calendar days, newest first. Boundaries
-    // fall on midnight, so every whole day lies inside one piece and can be cached.
-    private static List<(DateTime From, DateTime To)> PiecesNewestFirst(DateTime from, DateTime to)
+    // Groups missing days (sorted ascending) into pieces spanning at most MaxDaysPerRequest calendar days,
+    // newest first. Gaps larger than one piece are skipped so already-cached stretches aren't re-fetched,
+    // while small cached gaps inside a 31-day window stay in one call. Boundaries fall on midnight (or
+    // from/fetchEnd for today), so every whole past day lies inside one piece and can be cached.
+    private static List<(DateOnly Lo, DateOnly Hi, DateTime From, DateTime To)> PiecesNewestFirst(
+        IReadOnlyList<DateOnly> missingDaysAscending, DateTime from, DateTime fetchEnd, DateOnly today)
     {
-        var pieces = new List<(DateTime From, DateTime To)>();
-        for (var end = to; end > from;)
+        var todayStart = today.ToDateTime(TimeOnly.MinValue);
+        var pieces = new List<(DateOnly Lo, DateOnly Hi, DateTime From, DateTime To)>();
+        for (var hiIndex = missingDaysAscending.Count - 1; hiIndex >= 0;)
         {
-            var start = end.AddTicks(-1).Date.AddDays(-(MaxDaysPerRequest - 1));
-            if (start < from)
+            var hi = missingDaysAscending[hiIndex];
+            var limit = hi.AddDays(-(MaxDaysPerRequest - 1));
+            var loIndex = hiIndex;
+            while (loIndex > 0 && missingDaysAscending[loIndex - 1] >= limit)
             {
-                start = from;
+                loIndex--;
             }
-            pieces.Add((start, end));
-            end = start;
+
+            var lo = missingDaysAscending[loIndex];
+            var pieceFrom = lo == today ? Max(from, todayStart) : lo.ToDateTime(TimeOnly.MinValue);
+            var pieceTo = hi == today ? fetchEnd : hi.AddDays(1).ToDateTime(TimeOnly.MinValue);
+            pieces.Add((lo, hi, pieceFrom, pieceTo));
+            hiIndex = loIndex - 1;
         }
         return pieces;
     }
