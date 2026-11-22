@@ -49,6 +49,7 @@ What it does:
    - `MyUplink__ClientId` and `MyUplink__ClientSecret`, only if `MYUPLINK_CLIENT_ID` and `MYUPLINK_CLIENT_SECRET` are in `.env`: they turn on the optional heat pump tools and the hourly heat pump log, which is kept in the same directory as the cache.
 5. Creates the deploy identity `sev-mcp-deploy`. It can only deploy to this web app, and only trusts GitHub jobs in this repository's `production` environment.
 6. Creates that GitHub environment (limited to `main`), its secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, and the repository variable `AZURE_WEBAPP_NAME`. The deploy job runs only once this variable exists.
+7. Sets up a daily backup of the app (`deploy/setup-backup.sh`), see [Backups](#backups).
 
 At the end it prints the MCP URL, the client ID and the client secret. **The secret is shown only once:** copy it into Claude (step 4), then clear your terminal.
 
@@ -95,17 +96,38 @@ When you connect, Claude opens Microsoft's sign-in page. Sign in with the accoun
   az ad app credential reset --id <client-id> --display-name "Claude connector" --years 2 --append --query password -o tsv
   ```
 
+## Backups
+
+The heat pump log can't be fetched again if it's lost (myUplink gives apps no history), so the app is backed up in two ways:
+
+- **Automatic backups** (built in on B1, nothing to set up): every hour, kept 30 days, including `/home`. They're stored with the app, can't be downloaded, and go away if the app or subscription does.
+- **A daily custom backup** (`deploy/setup-backup.sh`, run by the setup script): the whole app, including `/home/data/sev-cache` (the SEV cache and the heat pump log), as a ZIP in the storage account in the resource group `<group>-backup` (container `websitebackups`), kept 30 days. Keeping it in its own resource group means deleting the app's group doesn't delete the backups. It costs a few cents a month.
+
+Run the backup script on its own with the same settings as the setup script:
+
+```bash
+RESOURCE_GROUP=sev-mcp LOCATION=northeurope ./deploy/setup-backup.sh
+```
+
+- **Renew before the SAS expires:** custom backups write through a SAS URL (App Service doesn't support a managed identity here). The script makes one valid for 2 years and prints the date; run it again before then, or the backups stop.
+- **Check the backups:** `az webapp config backup list -g <group> -n <app> -o table`, or **Backups** on the web app in the portal.
+- **Restore:** in the portal, **Backups** → pick a backup → **Restore**, to the same app or a new one. App Service stops the app while restoring.
+- **Get one file back:** download the backup's ZIP from the storage account and take it from `fs/data/sev-cache/`. Don't change files in the `websitebackups` container, or the backups can't be restored.
+
 ## Optional: only accept Anthropic's servers
 
 Claude's custom connectors reach your server from Anthropic's cloud, not from your phone. For an extra layer, you can limit the web app to Anthropic's outbound IP ranges ([listed by Anthropic](https://platform.claude.com/docs/en/api/ip-addresses)) with App Service access restrictions. The login already blocks everyone else, and the ranges can change, so this is optional.
 
 ## Costs and cleanup
 
-The B1 plan is the only paid part. To delete everything (this stops the costs):
+The B1 plan is the main cost; the backup storage adds a few cents a month. To delete everything (this stops the costs):
 
 ```bash
 az group delete --name sev-mcp
+az group delete --name sev-mcp-backup
 az ad app delete --id <client-id>
 ```
+
+The backup group is separate on purpose: delete it only if you don't want the backups any more.
 
 Also remove the connector in Claude, and the `production` environment and `AZURE_WEBAPP_NAME` variable on GitHub.
