@@ -71,7 +71,7 @@ Settings for the hosted mode, as environment variables:
 | `Auth__Authority` | `https://login.microsoftonline.com/<tenant-id>/v2.0` | The token issuer (v2 tokens). |
 | `Auth__Resource` | `https://<app>.azurewebsites.net/mcp` | The public MCP URL, exactly as entered in Claude. |
 | `Auth__Audiences__0` | `<client-id>` | Accepted token audience: the Entra app registration's client ID. |
-| `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for. |
+| `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
 | `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
 

@@ -10,8 +10,8 @@ namespace Sev.McpServer;
 // - Without a valid token, /mcp answers 401 with WWW-Authenticate: Bearer resource_metadata="...".
 // - That metadata (RFC 9728, served by the SDK's McpAuth scheme at /.well-known/oauth-protected-resource/mcp)
 //   names the MCP URL and the authorization server, where Claude logs the user in.
-// - Requests then carry an access token, which JwtBearer checks (signature, issuer, audience, expiry), and
-//   only users in AuthOptions.AllowedUsers get through.
+// - Requests then carry an access token, which JwtBearer checks (signature, issuer, audience, expiry). Only
+//   users in AuthOptions.AllowedUsers whose token holds one of AuthOptions.Scopes ("scp" claim) get through.
 public static class McpLogin
 {
     public const string AllowedUsersPolicy = "AllowedUsers";
