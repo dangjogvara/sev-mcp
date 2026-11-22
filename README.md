@@ -12,7 +12,7 @@ This is an unofficial, personal project, not made or endorsed by SEV. There's no
 |---|---|
 | `list_meters` | The meters on your SEV account, with address and install/removal dates. |
 | `get_usage` | Electricity use in kWh per hour, day or month, with a total per meter. |
-| `get_cost` | SEV's estimated cost in DKK, per hour, day or month. An estimate; it may differ from your bill. |
+| `get_cost` | SEV's estimated cost in DKK, per hour, day or month, and each meter's price per kWh. An estimate; it may differ from your bill. |
 | `get_co2` | SEV's estimated CO2 emissions in kg, based on how green the grid was each hour. |
 | `get_heatpump_status` | *Optional, with myUplink.* The heat pump's temperatures, status, settings and alarms right now. |
 | `get_heatpump_history` | *Optional, with myUplink.* Past heat pump readings, such as outdoor temperature, from the server's own hourly log. |

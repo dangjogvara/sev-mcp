@@ -75,6 +75,7 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 - `HourlySummary.Summarize` aggregates the hourly data into hours, days or months in C#, for any `IMeterReadings`, and returns `MeterSeriesResult`s.
 - Results must never present missing data as zero: `total` is `null` without readings, and `expectedHours` / `missingHours` / `note` show gaps, per meter and per period. Expected hours are limited to each meter's installation (`ExpectedHoursFor`): on the install and removal days the meter starts at its first reading and ends after its last one.
 - `GetHourlySeriesAsync` reads "now" (injected `TimeProvider`) before fetching, so a call that crosses the top of an hour never expects an hour `SevDataService` didn't fetch.
+- `get_cost` also gives each meter `prices` (`CostPrices`, added through `GetHourlySeriesAsync`'s `addDetails`): stretches of the period with one `price_unit` and tariff. SEV's price is fixed per meter (the same every hour of the day), differs between meters, and changes rarely, so this is usually one stretch.
 - Periods SEV hasn't been asked for yet are marked `notFetched`, with a note telling Claude to ask again later. Any new aggregation must keep all this.
 - Real data shows why: one E350 meter delivers a day at a time, so today is always missing for it, while an E360 lags about an hour.
 

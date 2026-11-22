@@ -46,6 +46,9 @@ public class UsageTools(SevDataService sev, TimeProvider time)
         "Gets SEV's estimated cost of the electricity used, in DKK (unit 'DKR'), per hour, day or month for the user's meters, " +
         "with a total per meter. Each hour's cost is that hour's kWh times SEV's price per kWh for the meter's tariff. " +
         "It is an estimate of the electricity used and may differ from the bill. " +
+        "Each meter also lists 'prices': its price per kWh in DKK and tariff number, as stretches of the period with one " +
+        "price (usually one; several when SEV changed the price). The price is per meter, the same every hour of the day, " +
+        "and can differ between meters. " +
         "Arguments, limits and missing-data reporting are the same as for get_usage: times are local Faroese time, " +
         "the range is [from, to), and long periods may come back partly fetched with a note to ask again in a few minutes. " +
         "Cost uses the same SEV call budget as get_usage (10 calls per 5 minutes), so asking for both usage and cost of a " +
@@ -61,7 +64,7 @@ public class UsageTools(SevDataService sev, TimeProvider time)
         GetHourlySeriesAsync(
             from, to, granularity, meters,
             async (ids, fromTime, toTime) => await sev.GetEstimatedCostAsync(ids, fromTime, toTime, cancellationToken),
-            defaultUnit: "DKR", decimals: 2, cancellationToken);
+            defaultUnit: "DKR", decimals: 2, cancellationToken, addDetails: CostPrices.WithPrices);
 
     [McpServerTool(Name = "get_co2", Title = "Get estimated CO2 emissions", ReadOnly = true, Idempotent = true)]
     [Description(
@@ -86,6 +89,7 @@ public class UsageTools(SevDataService sev, TimeProvider time)
 
     // What get_usage, get_cost and get_co2 share: check the arguments, pick the meters, fetch the hourly series
     // with `fetch`, and summarize it. defaultUnit is used when no reading says its unit; decimals is the rounding.
+    // addDetails lets one series add to each meter's result (get_cost adds the prices).
     private Task<IReadOnlyList<MeterSeriesResult>> GetHourlySeriesAsync(
         string from,
         string to,
@@ -94,7 +98,8 @@ public class UsageTools(SevDataService sev, TimeProvider time)
         Func<IReadOnlyList<int>, DateTime, DateTime, Task<IHourlyResult>> fetch,
         string defaultUnit,
         int decimals,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<MeterSeriesResult, IHourlyResult, MeterSeriesResult>? addDetails = null)
     {
         var bucket = Periods.ParseGranularity(granularity);
         var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
@@ -107,9 +112,10 @@ public class UsageTools(SevDataService sev, TimeProvider time)
             var selected = ResolveMeters(available, meters);
 
             var result = SevToolErrors.ThrowIfEmptyAnswer(await fetch(selected.Select(m => m.MeterId).ToList(), fromTime, toTime));
-            return HourlySummary.Summarize(
+            var summaries = HourlySummary.Summarize(
                 selected, result.Meters, fromTime, toTime, localNow, bucket, result.NotFetched,
                 defaultUnit, decimals);
+            return addDetails is null ? summaries : summaries.Select(s => addDetails(s, result)).ToList();
         });
     }
 
