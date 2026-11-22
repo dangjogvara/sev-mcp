@@ -41,7 +41,17 @@ public static class SevServices
             .AddHttpMessageHandler<SevRateLimitHandler>();
 
         // The cache outlives requests; the service that uses it is created per use, like the SevClient it wraps.
-        services.AddSingleton(new SevCache());
+        // With Sev:CacheDirectory set, the cache is saved there and reloaded when the server restarts.
+        services.AddSingleton(sp =>
+        {
+            var directory = sp.GetRequiredService<IOptions<SevOptions>>().Value.CacheDirectory;
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                return new SevCache();
+            }
+            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<SevCache>();
+            return new SevCache(files: new SevCacheFiles(directory, message => logger.LogInformation("{Message}", message)));
+        });
         services.AddTransient<SevDataService>();
 
         return services;

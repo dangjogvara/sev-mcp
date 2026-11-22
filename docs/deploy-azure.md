@@ -32,7 +32,7 @@ If you change `RESOURCE_GROUP` or `LOCATION`, pass the same values every time yo
 
 What it does:
 
-1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the cache and rate-limit count survive), TLS 1.2 and FTP disabled.
+1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the app isn't put to sleep when idle, which would drop the SEV login and the rate-limit count), TLS 1.2 and FTP disabled.
 2. Creates the Entra app registration "SEV MCP", the login Claude uses:
    - single tenant
    - Claude's callback URL `https://claude.ai/api/mcp/auth_callback`
@@ -45,6 +45,7 @@ What it does:
    - `Auth__Authority`, `Auth__Resource`, `Auth__Audiences__0`, `Auth__Scopes__0`
    - `Auth__AllowedUsers__0`: your own Entra object ID, so only you get in
    - `AllowedHosts`
+   - `Sev__CacheDirectory`: `/home/data/sev-cache`, where the cache is saved. `/home` survives restarts and deploys, so cached days don't have to be fetched from SEV again.
 5. Creates the deploy identity `sev-mcp-deploy`. It can only deploy to this web app, and only trusts GitHub jobs in this repository's `production` environment.
 6. Creates that GitHub environment (limited to `main`), its secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, and the repository variable `AZURE_WEBAPP_NAME`. The deploy job runs only once this variable exists.
 

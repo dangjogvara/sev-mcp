@@ -55,7 +55,7 @@ SEV's API has a few limits that shape how this server works:
 - **At most 31 days of hourly data per call.** Longer periods are fetched in 31-day pieces, newest first, with at most 6 pieces per question. If a period doesn't fit, the answer says which part is still missing, and asking again a few minutes later fills it in.
 - **Too many calls get an empty answer instead of an error.** The server tells Claude that this probably means the limit was reached, rather than reporting no usage.
 
-To save calls, the meter list is kept for 6 hours and completed past days are kept in memory, so asking about them again costs nothing. The cache is lost when the server restarts.
+To save calls, the meter list is kept for 6 hours and completed past days are cached, so asking about them again costs nothing. Locally the cache is kept in memory and lost when the server stops. With `Sev__CacheDirectory` set (hosted), it is also saved there as JSON files and reloaded after a restart or deploy.
 
 ## Security
 
@@ -74,6 +74,7 @@ Settings for the hosted mode, as environment variables:
 | `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
 | `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
+| `Sev__CacheDirectory` | `/home/data/sev-cache` | Where the cache is saved so it survives restarts. Optional. |
 
 [docs/deploy-azure.md](docs/deploy-azure.md) explains how to host it on Azure App Service. A setup script creates the Entra app registration and these settings, and GitHub Actions deploys `main`.
 

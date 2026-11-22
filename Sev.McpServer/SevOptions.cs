@@ -13,4 +13,9 @@ public class SevOptions
 
     [Required]
     public string Key { get; set; } = "";
+
+    // Where the cache is saved so it survives restarts (Sev__CacheDirectory). Hosted on App Service this is
+    // /home/data/sev-cache: /home persists, while /home/site/wwwroot is replaced by every deploy.
+    // Empty (the default, and normal locally) keeps the cache in memory only.
+    public string? CacheDirectory { get; set; }
 }

@@ -5,7 +5,9 @@ namespace Sev.Client;
 // In-memory store behind SevDataService. Register as a singleton so the data outlives each request;
 // SevDataService itself is short-lived because it holds a SevClient (and with it an HttpClient).
 // Grows by one entry per meter per day queried, which is small for a single account.
-public class SevCache(TimeProvider? timeProvider = null)
+// With SevCacheFiles, it starts with what was saved before a restart, and SevDataService saves to it
+// whenever something new is cached; without, everything is lost on restart.
+public class SevCache
 {
     public static readonly TimeSpan MeterListLifetime = TimeSpan.FromHours(6);
 
@@ -19,7 +21,17 @@ public class SevCache(TimeProvider? timeProvider = null)
     // meters deliver a day at a time.
     public const int DaysUntilFinal = 7;
 
-    internal TimeProvider Time { get; } = timeProvider ?? TimeProvider.System;
+    public SevCache(TimeProvider? timeProvider = null, SevCacheFiles? files = null)
+    {
+        Time = timeProvider ?? TimeProvider.System;
+        Files = files;
+        files?.LoadInto(this);
+    }
+
+    internal TimeProvider Time { get; }
+
+    // Where the cache is saved; null keeps it in memory only.
+    internal SevCacheFiles? Files { get; }
 
     // Held while checking the cache and fetching, so concurrent tool calls don't fetch the same data twice.
     internal SemaphoreSlim Lock { get; } = new(1, 1);

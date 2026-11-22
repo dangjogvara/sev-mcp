@@ -4,7 +4,7 @@ using Sev.Client.Models;
 
 namespace Sev.Client.Tests;
 
-public class SevDataServiceTests
+public partial class SevDataServiceTests
 {
     // The fake clock starts at 2026-11-21 12:00 UTC, which is 12:00 Faroese time (winter, UTC+0).
     private static readonly DateOnly Today = new(2026, 11, 21);
