@@ -59,4 +59,6 @@ Every change, including docs, goes through an issue and a PR. Never commit direc
 3. Open the PR with `Closes #<issue#>` in the body.
 4. Only merge when asked: wait for CI to pass, then `gh pr merge <pr#> --squash --delete-branch`.
 
+Dependabot (`.github/dependabot.yml`) opens its own PRs every Monday for NuGet packages and GitHub Actions; they need no issue. Like any PR, merge one only when asked and after CI passes, and remember that merging deploys it. Major updates of `Microsoft.AspNetCore.*` are ignored because their major version follows .NET (11.x needs net11); move them together with `TargetFramework`.
+
 Never rename the head branch of an open PR. GitHub closes the PR instead of retargeting it.
