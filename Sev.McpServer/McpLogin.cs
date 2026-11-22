@@ -15,7 +15,47 @@ public static class McpLogin
 {
     public const string AllowedUsersPolicy = "AllowedUsers";
 
-    public static void AddMcpLogin(this IServiceCollection services, AuthOptions auth)
+    // Reads the Auth section and adds the login when it's configured (hosted). Without it the server only
+    // allows local use, and outside Development it refuses to start, so it can't go online unprotected.
+    public static AuthOptions AddLoginIfConfigured(this WebApplicationBuilder builder)
+    {
+        var auth = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+        if (auth.Enabled)
+        {
+            var problems = auth.Validate();
+            if (problems.Count > 0)
+            {
+                throw new InvalidOperationException("Invalid Auth configuration: " + string.Join(" ", problems));
+            }
+            builder.Services.AddMcpLogin(auth);
+        }
+        else if (!builder.Environment.IsDevelopment())
+        {
+            throw new InvalidOperationException(
+                "No Auth configuration: outside Development the server requires a login. Set Auth:Authority, Auth:Resource, " +
+                "Auth:Audiences and Auth:AllowedUsers (see README).");
+        }
+        return auth;
+    }
+
+    // Maps /mcp behind the login when it's configured, or behind the local-only checks when it isn't.
+    public static void MapMcpEndpoint(this WebApplication app, AuthOptions auth)
+    {
+        if (auth.Enabled)
+        {
+            app.UseForwardedHeaders();
+            app.UseAuthentication();
+            app.UseAuthorization();
+            app.MapMcp("/mcp").RequireAuthorization(AllowedUsersPolicy);
+        }
+        else
+        {
+            app.UseLocalOriginsOnly();
+            app.MapMcp("/mcp");
+        }
+    }
+
+    private static void AddMcpLogin(this IServiceCollection services, AuthOptions auth)
     {
         services
             .AddAuthentication(options =>

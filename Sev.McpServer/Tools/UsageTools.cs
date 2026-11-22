@@ -6,13 +6,6 @@ using Sev.Client.Models;
 
 namespace Sev.McpServer.Tools;
 
-public enum Granularity
-{
-    Hour,
-    Day,
-    Month,
-}
-
 [McpServerToolType]
 public class UsageTools(SevDataService sev)
 {
@@ -37,7 +30,7 @@ public class UsageTools(SevDataService sev)
         "Completed past days are cached, so asking about them again is cheap. " +
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero usage or as a complete total.")]
-    public Task<IReadOnlyList<MeterUsageResult>> GetUsageAsync(
+    public Task<IReadOnlyList<MeterSeriesResult>> GetUsageAsync(
         [Description(FromDescription)] string from,
         [Description(ToDescription)] string to,
         [Description(GranularityDescription)] string granularity = "day",
@@ -59,7 +52,7 @@ public class UsageTools(SevDataService sev)
         "long period takes twice the calls. Completed past days are cached. " +
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero cost or as a complete total.")]
-    public Task<IReadOnlyList<MeterUsageResult>> GetCostAsync(
+    public Task<IReadOnlyList<MeterSeriesResult>> GetCostAsync(
         [Description(FromDescription)] string from,
         [Description(ToDescription)] string to,
         [Description(GranularityDescription)] string granularity = "day",
@@ -80,7 +73,7 @@ public class UsageTools(SevDataService sev)
         "CO2 uses the same SEV call budget as get_usage and get_cost (10 calls per 5 minutes). Completed past days are cached. " +
         "If a total or value is null, or missingHours is above 0, tell the user that data is missing for that period; " +
         "don't report it as zero emissions or as a complete total.")]
-    public Task<IReadOnlyList<MeterUsageResult>> GetCo2Async(
+    public Task<IReadOnlyList<MeterSeriesResult>> GetCo2Async(
         [Description(FromDescription)] string from,
         [Description(ToDescription)] string to,
         [Description(GranularityDescription)] string granularity = "day",
@@ -93,7 +86,7 @@ public class UsageTools(SevDataService sev)
 
     // What get_usage, get_cost and get_co2 share: check the arguments, pick the meters, fetch the hourly series
     // with `fetch`, and summarize it. defaultUnit is used when no reading says its unit; decimals is the rounding.
-    private Task<IReadOnlyList<MeterUsageResult>> GetHourlySeriesAsync(
+    private Task<IReadOnlyList<MeterSeriesResult>> GetHourlySeriesAsync(
         string from,
         string to,
         string granularity,
@@ -111,7 +104,7 @@ public class UsageTools(SevDataService sev)
             var selected = ResolveMeters(available, meters);
 
             var result = SevToolErrors.ThrowIfEmptyAnswer(await fetch(selected.Select(m => m.MeterId).ToList(), fromTime, toTime));
-            return Summarize(
+            return HourlySummary.Summarize(
                 selected, result.Meters, fromTime, toTime, SevTime.LocalNow(TimeProvider.System), bucket, result.NotFetched,
                 defaultUnit, decimals);
         });
@@ -196,172 +189,4 @@ public class UsageTools(SevDataService sev)
         || string.Equals(meter.MeterName, item, StringComparison.OrdinalIgnoreCase)
         || (meter.Nickname?.Contains(item, StringComparison.OrdinalIgnoreCase) ?? false)
         || meter.Address.Contains(item, StringComparison.OrdinalIgnoreCase);
-
-    // One result per selected meter, in order. Meters SEV left out are reported as having no data,
-    // and every total and period says how many of its expected hours have no reading, so missing or
-    // partial data is never mistaken for zero or complete usage.
-    // Hours outside a meter's installation aren't expected, so a meter installed partway through the
-    // range isn't reported as missing data before it was there.
-    // notFetched is the part of the range SevDataService didn't get to in this call; missing hours there
-    // are reported as "not fetched yet" rather than as missing data.
-    // Works for any hourly series (kWh usage, DKK cost, kg CO2): defaultUnit is used when there are no readings to
-    // take the unit from, and values are rounded to `decimals` places.
-    public static IReadOnlyList<MeterUsageResult> Summarize(
-        IReadOnlyList<MeterSummary> meters, IReadOnlyList<IMeterReadings> usage, DateTime from, DateTime to, DateTime localNow,
-        Granularity granularity, (DateTime From, DateTime To)? notFetched = null, string defaultUnit = "kWh", int decimals = 3)
-    {
-        var rangeHours = ExpectedHours(from, to, localNow);
-        var byMeter = usage.ToDictionary(m => m.MeterId);
-
-        return meters
-            .Select(meter => Summarize(
-                meter,
-                byMeter.TryGetValue(meter.MeterId.ToString(), out var m) ? m.Readings : [],
-                rangeHours,
-                granularity,
-                notFetched,
-                defaultUnit,
-                decimals))
-            .ToList();
-    }
-
-    // The hours in rangeHours that fall within the meter's installation. The install and removal dates
-    // have no time of day, so on those days the meter is taken to start at its first reading and to end
-    // after its last one; without a reading that day, the whole day is expected.
-    public static IReadOnlyList<DateTime> ExpectedHoursFor(
-        MeterSummary meter, IReadOnlyList<DateTime> rangeHours, IReadOnlyList<IHourlyReading> readings)
-    {
-        IEnumerable<DateTime> ReadingsOn(DateOnly day) =>
-            readings.Select(r => r.TimeStamp).Where(t => DateOnly.FromDateTime(t) == day);
-
-        var start = DateTime.MinValue;
-        if (meter.InstallDate is { } installed)
-        {
-            start = ReadingsOn(installed).DefaultIfEmpty(installed.ToDateTime(TimeOnly.MinValue)).Min();
-        }
-
-        var end = DateTime.MaxValue;
-        if (meter.RemovalDate is { } removed)
-        {
-            var onRemovalDay = ReadingsOn(removed).ToList();
-            end = onRemovalDay.Count > 0 ? onRemovalDay.Max().AddHours(1) : removed.AddDays(1).ToDateTime(TimeOnly.MinValue);
-        }
-
-        return rangeHours.Where(h => h >= start && h < end).ToList();
-    }
-
-    private static MeterUsageResult Summarize(
-        MeterSummary meter, IReadOnlyList<IHourlyReading> readings, IReadOnlyList<DateTime> rangeHours, Granularity granularity,
-        (DateTime From, DateTime To)? notFetched, string defaultUnit, int decimals)
-    {
-        var expectedHours = ExpectedHoursFor(meter, rangeHours, readings);
-        var readingHours = readings.Select(r => r.TimeStamp).ToHashSet();
-        var missingHours = expectedHours.Count(h => !readingHours.Contains(h));
-        bool IsNotFetched(DateTime hour) => notFetched is { } nf && hour >= nf.From && hour < nf.To && !readingHours.Contains(hour);
-        var notFetchedHours = expectedHours.Count(IsNotFetched);
-        var hasReadings = readings.Count > 0;
-
-        var notes = new List<string>();
-        if (notFetchedHours > 0)
-        {
-            notes.Add(
-                $"Data from {notFetched!.Value.From:yyyy-MM-dd} up to (not including) {notFetched.Value.To:yyyy-MM-dd} isn't fetched yet: " +
-                "SEV returns at most 31 days per call and allows 10 calls per 5 minutes. Ask again in a few minutes to get the rest; " +
-                "what was already fetched is kept.");
-        }
-        if (!hasReadings && notFetchedHours == 0)
-        {
-            notes.Add(
-                rangeHours.Count == 0 ? "This period hasn't happened yet, so there are no readings."
-                : expectedHours.Count == 0 ? $"The meter wasn't installed during this period ({Installation(meter)}), so there are no readings."
-                : "No readings for this period: the data is missing, not zero usage.");
-        }
-        else if (missingHours > notFetchedHours)
-        {
-            notes.Add($"{missingHours - notFetchedHours} of {expectedHours.Count} hours have no reading, so the total covers only part of the period and is too low.");
-        }
-        var note = notes.Count > 0 ? string.Join(" ", notes) : null;
-
-        // A period is listed if it has readings or expected hours; its value is null without readings.
-        var periods = expectedHours.Select(h => PeriodKey(h, granularity))
-            .Concat(readings.Select(r => PeriodKey(r.TimeStamp, granularity)))
-            .Distinct()
-            .Order(StringComparer.Ordinal)
-            .Select(key =>
-            {
-                var inPeriod = readings.Where(r => PeriodKey(r.TimeStamp, granularity) == key).ToList();
-                var missingInPeriod = expectedHours.Count(h => PeriodKey(h, granularity) == key && !readingHours.Contains(h));
-                var notFetchedInPeriod = expectedHours.Any(h => PeriodKey(h, granularity) == key && IsNotFetched(h));
-                return new UsagePeriod(
-                    key,
-                    inPeriod.Count > 0 ? Math.Round(inPeriod.Sum(r => r.Value), decimals) : null,
-                    missingInPeriod > 0 ? missingInPeriod : null,
-                    notFetchedInPeriod ? true : null);
-            })
-            .ToList();
-
-        return new MeterUsageResult(
-            meter.MeterId,
-            meter.MeterName,
-            readings.FirstOrDefault()?.Unit ?? defaultUnit,
-            hasReadings ? Math.Round(readings.Sum(r => r.Value), decimals) : null,
-            expectedHours.Count,
-            missingHours,
-            note,
-            granularity.ToString().ToLowerInvariant(),
-            periods);
-    }
-
-    private static string Installation(MeterSummary meter) =>
-        (meter.InstallDate, meter.RemovalDate) switch
-        {
-            ({ } installed, { } removed) => $"installed {installed:yyyy-MM-dd}, removed {removed:yyyy-MM-dd}",
-            ({ } installed, null) => $"installed {installed:yyyy-MM-dd}",
-            (null, { } removed) => $"removed {removed:yyyy-MM-dd}",
-            _ => "no install date",
-        };
-
-    // ISO-style keys sort chronologically as strings.
-    private static string PeriodKey(DateTime time, Granularity granularity) => granularity switch
-    {
-        Granularity.Hour => time.ToString("yyyy-MM-dd'T'HH:mm"),
-        Granularity.Day => time.ToString("yyyy-MM-dd"),
-        _ => time.ToString("yyyy-MM"),
-    };
-
-    // The local hour starts in [from, to) that should have a reading by now: hours that have ended,
-    // skipping the hour that doesn't exist when summer time starts. On the day summer time ends the
-    // repeated hour has the same local label, so it is expected once.
-    public static IReadOnlyList<DateTime> ExpectedHours(DateTime from, DateTime to, DateTime localNow)
-    {
-        var currentHour = SevTime.StartOfHour(localNow);
-        var end = to < currentHour ? to : currentHour;
-        var hours = new List<DateTime>();
-        for (var hour = new DateTime(from.Year, from.Month, from.Day, from.Hour, 0, 0); hour < end; hour = hour.AddHours(1))
-        {
-            if (hour >= from && !SevTime.Zone.IsInvalidTime(hour))
-            {
-                hours.Add(hour);
-            }
-        }
-        return hours;
-    }
 }
-
-// Total is null when the meter has no readings. MissingHours counts expected hours without a reading;
-// Note explains either case in words. Periods are hours, days or months depending on Granularity.
-public record MeterUsageResult(
-    int MeterId,
-    string MeterName,
-    string Unit,
-    decimal? Total,
-    int ExpectedHours,
-    int MissingHours,
-    string? Note,
-    string Granularity,
-    IReadOnlyList<UsagePeriod> Periods);
-
-// Period is "2026-10-10T05:00" (hour start), "2026-10-10" (day) or "2026-10" (month), in Faroese local time.
-// Value is null when the period has no readings; MissingHours is null when none are missing.
-// NotFetched is true when some of the missing hours simply haven't been fetched yet (see the meter's Note).
-public record UsagePeriod(string Period, decimal? Value, int? MissingHours, bool? NotFetched = null);

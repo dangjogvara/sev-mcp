@@ -134,7 +134,7 @@ public class UsageToolsTests
             ]),
         };
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], usage, new DateTime(2026, 10, 10, 0, 0, 0), new DateTime(2026, 10, 10, 2, 0, 0), Later, Granularity.Hour));
 
         Assert.Equal(2222, meter.MeterId);
@@ -145,7 +145,7 @@ public class UsageToolsTests
         Assert.Equal(2, meter.ExpectedHours);
         Assert.Equal(0, meter.MissingHours);
         Assert.Null(meter.Note);
-        Assert.Equal([new UsagePeriod("2026-10-10T00:00", 1.167m, null), new UsagePeriod("2026-10-10T01:00", 0.754m, null)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-10T00:00", 1.167m, null), new SeriesPeriod("2026-10-10T01:00", 0.754m, null)], meter.Periods);
     }
 
     [Fact]
@@ -153,12 +153,12 @@ public class UsageToolsTests
     {
         var readings = Hours(Day(2026, 10, 10), 22);
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Hour));
 
         Assert.Equal(24, meter.Periods.Count);
-        Assert.Equal(new UsagePeriod("2026-10-10T22:00", null, 1), meter.Periods[22]);
-        Assert.Equal(new UsagePeriod("2026-10-10T23:00", null, 1), meter.Periods[23]);
+        Assert.Equal(new SeriesPeriod("2026-10-10T22:00", null, 1), meter.Periods[22]);
+        Assert.Equal(new SeriesPeriod("2026-10-10T23:00", null, 1), meter.Periods[23]);
     }
 
     [Fact]
@@ -166,14 +166,14 @@ public class UsageToolsTests
     {
         var readings = Hours(Day(2026, 10, 10), 24).Concat(Hours(Day(2026, 10, 11), 20)).ToList();
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 13), Later, Granularity.Day));
 
         Assert.Equal(
             [
-                new UsagePeriod("2026-10-10", 24m, null),
-                new UsagePeriod("2026-10-11", 20m, 4),
-                new UsagePeriod("2026-10-12", null, 24),
+                new SeriesPeriod("2026-10-10", 24m, null),
+                new SeriesPeriod("2026-10-11", 20m, 4),
+                new SeriesPeriod("2026-10-12", null, 24),
             ],
             meter.Periods);
         Assert.Equal(44m, meter.Total);
@@ -186,30 +186,30 @@ public class UsageToolsTests
     {
         var readings = Hours(Day(2026, 9, 30), 24).Concat(Hours(Day(2026, 10, 1), 24)).ToList();
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", readings)], Day(2026, 9, 30), Day(2026, 10, 2), Later, Granularity.Month));
 
-        Assert.Equal([new UsagePeriod("2026-09", 24m, null), new UsagePeriod("2026-10", 24m, null)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-09", 24m, null), new SeriesPeriod("2026-10", 24m, null)], meter.Periods);
         Assert.Equal(48m, meter.Total);
     }
 
     [Fact]
     public void Summarize_MeterWithoutReadings_HasNoTotalAndSaysDataIsMissing()
     {
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", [])], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day));
 
         Assert.Null(meter.Total);
         Assert.Equal(24, meter.ExpectedHours);
         Assert.Equal(24, meter.MissingHours);
         Assert.Contains("not zero", meter.Note);
-        Assert.Equal([new UsagePeriod("2026-10-10", null, 24)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-10", null, 24)], meter.Periods);
     }
 
     [Fact]
     public void Summarize_MeterLeftOutBySev_IsReportedAsMissing()
     {
-        var results = UsageTools.Summarize(
+        var results = HourlySummary.Summarize(
             [Kitchen, Heat], [new MeterUsage("2222", Hours(Day(2026, 10, 10), 24))], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day);
 
         Assert.Equal([1111, 2222], results.Select(r => r.MeterId));
@@ -223,19 +223,19 @@ public class UsageToolsTests
     {
         var now = new DateTime(2026, 11, 21, 10, 30, 0);
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", Hours(Day(2026, 11, 21), 10))], Day(2026, 11, 21), Day(2026, 11, 22), now, Granularity.Day));
 
         Assert.Equal(10, meter.ExpectedHours);
         Assert.Equal(0, meter.MissingHours);
         Assert.Null(meter.Note);
-        Assert.Equal([new UsagePeriod("2026-11-21", 10m, null)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-11-21", 10m, null)], meter.Periods);
     }
 
     [Fact]
     public void Summarize_FuturePeriod_SaysItHasNotHappened()
     {
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", [])], Day(2026, 12, 1), Day(2026, 12, 2), Later, Granularity.Day));
 
         Assert.Null(meter.Total);
@@ -252,12 +252,12 @@ public class UsageToolsTests
             .SelectMany(d => Hours(Day(2026, 10, 1).AddDays(d), d == 9 ? 20 : 24))
             .ToList();
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", readings)], Day(2026, 9, 1), Day(2026, 11, 1), Later, Granularity.Month,
             notFetched: (Day(2026, 9, 1), Day(2026, 10, 1))));
 
         Assert.Equal(
-            [new UsagePeriod("2026-09", null, 720, true), new UsagePeriod("2026-10", 740m, 4, null)],
+            [new SeriesPeriod("2026-09", null, 720, true), new SeriesPeriod("2026-10", 740m, 4, null)],
             meter.Periods);
         Assert.Contains("from 2026-09-01 up to (not including) 2026-10-01 isn't fetched yet", meter.Note);
         Assert.Contains("Ask again in a few minutes", meter.Note);
@@ -267,7 +267,7 @@ public class UsageToolsTests
     [Fact]
     public void Summarize_NothingFetched_DoesNotClaimDataIsMissing()
     {
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterUsage("2222", [])], Day(2026, 9, 1), Day(2026, 10, 1), Later, Granularity.Month,
             notFetched: (Day(2026, 9, 1), Day(2026, 10, 1))));
 
@@ -285,7 +285,7 @@ public class UsageToolsTests
             .Select(h => new CostReading(Day(2026, 10, 10).AddHours(h), 1.3760499999948483m, "DKR", 1.825m, 310))
             .ToList();
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterCost("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
             defaultUnit: "DKR", decimals: 2));
 
@@ -293,13 +293,13 @@ public class UsageToolsTests
         Assert.Equal(33.03m, meter.Total);
         Assert.Equal(0, meter.MissingHours);
         Assert.Null(meter.Note);
-        Assert.Equal([new UsagePeriod("2026-10-10", 33.03m, null)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-10", 33.03m, null)], meter.Periods);
     }
 
     [Fact]
     public void Summarize_CostWithoutReadings_UsesDefaultUnitAndSaysDataIsMissing()
     {
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterCost("2222", [])], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
             defaultUnit: "DKR", decimals: 2));
 
@@ -318,14 +318,14 @@ public class UsageToolsTests
             .Select(h => new Co2Reading(Day(2026, 10, 10).AddHours(h), 0.4833089999986543m, "Kg CO2"))
             .ToList();
 
-        var meter = Assert.Single(UsageTools.Summarize(
+        var meter = Assert.Single(HourlySummary.Summarize(
             [Heat], [new MeterCo2("2222", readings)], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day,
             defaultUnit: "Kg CO2", decimals: 2));
 
         Assert.Equal("Kg CO2", meter.Unit);
         Assert.Equal(11.6m, meter.Total);
         Assert.Equal(0, meter.MissingHours);
-        Assert.Equal([new UsagePeriod("2026-10-10", 11.6m, null)], meter.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-10", 11.6m, null)], meter.Periods);
     }
 
     // --- Meters installed or removed within the range ---
@@ -337,13 +337,13 @@ public class UsageToolsTests
         var meter = Heat with { InstallDate = new DateOnly(2026, 10, 11) };
         var readings = Hours(Day(2026, 10, 11).AddHours(8), 16).Concat(Hours(Day(2026, 10, 12), 24)).ToList();
 
-        var result = Assert.Single(UsageTools.Summarize(
+        var result = Assert.Single(HourlySummary.Summarize(
             [meter], [new MeterUsage("2222", readings)], Day(2026, 10, 1), Day(2026, 10, 13), Later, Granularity.Day));
 
         Assert.Equal(40, result.ExpectedHours);
         Assert.Equal(0, result.MissingHours);
         Assert.Null(result.Note);
-        Assert.Equal([new UsagePeriod("2026-10-11", 16m, null), new UsagePeriod("2026-10-12", 24m, null)], result.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-11", 16m, null), new SeriesPeriod("2026-10-12", 24m, null)], result.Periods);
     }
 
     [Fact]
@@ -353,13 +353,13 @@ public class UsageToolsTests
         var meter = Heat with { RemovalDate = new DateOnly(2026, 10, 11), Removed = true };
         var readings = Hours(Day(2026, 10, 10), 24).Concat(Hours(Day(2026, 10, 11), 12)).ToList();
 
-        var result = Assert.Single(UsageTools.Summarize(
+        var result = Assert.Single(HourlySummary.Summarize(
             [meter], [new MeterUsage("2222", readings)], Day(2026, 10, 10), Day(2026, 11, 1), Later, Granularity.Month));
 
         Assert.Equal(36, result.ExpectedHours);
         Assert.Equal(0, result.MissingHours);
         Assert.Null(result.Note);
-        Assert.Equal([new UsagePeriod("2026-10", 36m, null)], result.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10", 36m, null)], result.Periods);
     }
 
     [Fact]
@@ -367,19 +367,19 @@ public class UsageToolsTests
     {
         var meter = Heat with { InstallDate = new DateOnly(2026, 10, 11) };
 
-        var result = Assert.Single(UsageTools.Summarize(
+        var result = Assert.Single(HourlySummary.Summarize(
             [meter], [new MeterUsage("2222", [])], Day(2026, 10, 10), Day(2026, 10, 12), Later, Granularity.Day));
 
         Assert.Equal(24, result.ExpectedHours);
         Assert.Equal(24, result.MissingHours);
         Assert.Contains("not zero", result.Note);
-        Assert.Equal([new UsagePeriod("2026-10-11", null, 24)], result.Periods);
+        Assert.Equal([new SeriesPeriod("2026-10-11", null, 24)], result.Periods);
     }
 
     [Fact]
     public void Summarize_MeterNotInstalledDuringRange_SaysSo()
     {
-        var result = Assert.Single(UsageTools.Summarize(
+        var result = Assert.Single(HourlySummary.Summarize(
             [Old], [], Day(2026, 10, 10), Day(2026, 10, 11), Later, Granularity.Day));
 
         Assert.Null(result.Total);
@@ -398,7 +398,7 @@ public class UsageToolsTests
     [InlineData(2026, 10, 10, 24)]
     public void ExpectedHours_FollowFaroeseClock(int year, int month, int day, int expected)
     {
-        var hours = UsageTools.ExpectedHours(Day(year, month, day), Day(year, month, day).AddDays(1), Later);
+        var hours = HourlySummary.ExpectedHours(Day(year, month, day), Day(year, month, day).AddDays(1), Later);
 
         Assert.Equal(expected, hours.Count);
         Assert.Equal(expected, hours.Distinct().Count());
@@ -407,7 +407,7 @@ public class UsageToolsTests
     [Fact]
     public void ExpectedHours_PartialHourAtStartIsNotExpected()
     {
-        var hours = UsageTools.ExpectedHours(
+        var hours = HourlySummary.ExpectedHours(
             new DateTime(2026, 10, 10, 6, 30, 0), new DateTime(2026, 10, 10, 9, 0, 0), Later);
 
         Assert.Equal([new DateTime(2026, 10, 10, 7, 0, 0), new DateTime(2026, 10, 10, 8, 0, 0)], hours);

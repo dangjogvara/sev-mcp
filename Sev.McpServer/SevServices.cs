@@ -1,0 +1,49 @@
+using Microsoft.Extensions.Options;
+using Sev.Client;
+
+namespace Sev.McpServer;
+
+public static class SevServices
+{
+    // Everything the tools need to reach SEV: credentials, one shared login and rate limit, the cache,
+    // and SevDataService on top. Tools only ever take SevDataService.
+    public static IServiceCollection AddSevClient(this IServiceCollection services)
+    {
+        services
+            .AddOptions<SevOptions>()
+            .BindConfiguration(SevOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        // One rate limiter for every SEV call (login included), shared by both HttpClients below.
+        services.AddSingleton(new SevRateLimiter());
+        services.AddTransient<SevRateLimitHandler>();
+
+        // One token provider for the whole server, so all tool calls share one login.
+        // It keeps its own long-lived HttpClient for login; PooledConnectionLifetime makes it pick up DNS changes.
+        services.AddSingleton(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<SevOptions>>().Value;
+            var network = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) };
+            var http = new HttpClient(new SevRateLimitHandler(sp.GetRequiredService<SevRateLimiter>()) { InnerHandler = network })
+            {
+                BaseAddress = SevClient.DefaultBaseAddress
+            };
+            return new SevTokenProvider(http, options.User, options.Key);
+        });
+
+        // Handlers run in the order added: SevAuthHandler first (may log in), then SevRateLimitHandler
+        // right before the network, so only requests that are actually sent are counted.
+        services.AddTransient<SevAuthHandler>();
+        services
+            .AddHttpClient<SevClient>(http => http.BaseAddress = SevClient.DefaultBaseAddress)
+            .AddHttpMessageHandler<SevAuthHandler>()
+            .AddHttpMessageHandler<SevRateLimitHandler>();
+
+        // The cache outlives requests; the service that uses it is created per use, like the SevClient it wraps.
+        services.AddSingleton(new SevCache());
+        services.AddTransient<SevDataService>();
+
+        return services;
+    }
+}
