@@ -59,7 +59,23 @@ To save calls, the meter list is kept for 6 hours and completed past days are ke
 
 ## Security
 
-The server has **no authentication**, so it only accepts requests from the same computer: it rejects requests addressed to any host other than `localhost`, and requests from web pages that aren't on `localhost` (against DNS rebinding). Don't expose it to a network or the internet in its current form. Hosting it for the Claude web and mobile apps will need OAuth first.
+The server runs in one of two modes:
+
+- **Local (no login).** When no `Auth` section is configured, it only accepts requests from the same computer. It rejects requests addressed to any host other than `localhost`, and requests from web pages that aren't on `localhost` (against DNS rebinding). This is the default for `dotnet run` in Development. Outside Development the server refuses to start in this mode, so it can't be put online unprotected by mistake.
+- **Hosted (OAuth login).** When `Auth` is configured, `/mcp` requires an OAuth access token from Microsoft Entra ID, issued to one of the allowed users. Claude finds out where to log in through the [protected resource metadata](https://datatracker.ietf.org/doc/html/rfc9728) at `/.well-known/oauth-protected-resource/mcp`.
+
+Settings for the hosted mode, as environment variables:
+
+| Setting | Example | Purpose |
+|---|---|---|
+| `Auth__Authority` | `https://login.microsoftonline.com/<tenant-id>/v2.0` | The token issuer (v2 tokens). |
+| `Auth__Resource` | `https://<app>.azurewebsites.net/mcp` | The public MCP URL, exactly as entered in Claude. |
+| `Auth__Audiences__0` | `<client-id>` | Accepted token audience: the Entra app registration's client ID. |
+| `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for. |
+| `Auth__AllowedUsers__0` | `<your Entra object ID>` | Who may use the server; anyone else gets 403. |
+| `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
+
+Setting up the Entra app registration and the Azure App Service is described when deployment is added.
 
 ## Project structure
 

@@ -8,6 +8,25 @@ using Sev.McpServer.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Login: required when the Auth section is configured (hosted), and the server refuses to run unprotected
+// outside Development. Locally, without it, only same-machine use is allowed (see below).
+var auth = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+if (auth.Enabled)
+{
+    var problems = auth.Validate();
+    if (problems.Count > 0)
+    {
+        throw new InvalidOperationException("Invalid Auth configuration: " + string.Join(" ", problems));
+    }
+    builder.Services.AddMcpLogin(auth);
+}
+else if (!builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "No Auth configuration: outside Development the server requires a login. Set Auth:Authority, Auth:Resource, " +
+        "Auth:Audiences and Auth:AllowedUsers (see README).");
+}
+
 builder.Services
     .AddOptions<SevOptions>()
     .BindConfiguration(SevOptions.SectionName)
@@ -57,18 +76,30 @@ builder.Services
 
 var app = builder.Build();
 
-// Against DNS rebinding: a web page in the user's browser must not reach this unauthenticated server.
-// AllowedHosts (appsettings.json) rejects foreign Host headers; this rejects cross-site Origin headers.
-app.Use(async (context, next) =>
+if (auth.Enabled)
 {
-    if (!LocalOrigin.IsAllowed(context.Request.Headers.Origin))
+    app.UseForwardedHeaders();
+    app.UseAuthentication();
+    app.UseAuthorization();
+    app.MapMcp("/mcp").RequireAuthorization(McpLogin.AllowedUsersPolicy);
+}
+else
+{
+    // Against DNS rebinding: a web page in the user's browser must not reach this unauthenticated server.
+    // AllowedHosts (appsettings.json) rejects foreign Host headers; this rejects cross-site Origin headers.
+    app.Use(async (context, next) =>
     {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return;
-    }
-    await next(context);
-});
-
-app.MapMcp("/mcp");
+        if (!LocalOrigin.IsAllowed(context.Request.Headers.Origin))
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            return;
+        }
+        await next(context);
+    });
+    app.MapMcp("/mcp");
+}
 
 app.Run();
+
+// Lets the integration tests start the server with WebApplicationFactory<Program>.
+public partial class Program;
