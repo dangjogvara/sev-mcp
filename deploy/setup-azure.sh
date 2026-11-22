@@ -216,6 +216,11 @@ gh secret set AZURE_TENANT_ID --env production --repo "$GITHUB_REPO" --body "$TE
 gh secret set AZURE_SUBSCRIPTION_ID --env production --repo "$GITHUB_REPO" --body "$SUBSCRIPTION_ID"
 gh variable set AZURE_WEBAPP_NAME --repo "$GITHUB_REPO" --body "$APP"
 
+# --- Backups -------------------------------------------------------------------------------
+
+# Daily backup of the app, including the heat pump log, to its own storage account. See setup-backup.sh.
+LOCATION="$LOCATION" RESOURCE_GROUP="$RESOURCE_GROUP" APP="$APP" "$(dirname "$0")/setup-backup.sh"
+
 # --- What to do next ------------------------------------------------------------------------
 
 cat <<EOF
