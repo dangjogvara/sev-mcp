@@ -31,46 +31,32 @@ public class SevClient
         return customers ?? [];
     }
 
-    public async Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(
-        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
-    {
-        ValidateRange(from, to);
-        var request = new UsageRequest(meterIds, from, to);
+    public Task<IReadOnlyList<MeterUsage>> GetHourlyUsageAsync(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        PostHourlyAsync<MeterUsage>("hourly_kwh_usage", meterIds, from, to, cancellationToken);
 
-        using var response = await _http.PostAsJsonAsync("hourly_kwh_usage", request, JsonOptions, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+    // SEV's estimate of what the electricity used cost, per hour, in DKK.
+    public Task<IReadOnlyList<MeterCost>> GetEstimatedCostAsync(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        PostHourlyAsync<MeterCost>("estimated_cost", meterIds, from, to, cancellationToken);
 
-        var usage = await response.Content.ReadFromJsonAsync<List<MeterUsage>>(JsonOptions, cancellationToken);
-        return usage ?? [];
-    }
-
-    // SEV's estimate of what the electricity used cost, per hour, in DKK. Same request as hourly_kwh_usage.
-    public async Task<IReadOnlyList<MeterCost>> GetEstimatedCostAsync(
-        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
-    {
-        ValidateRange(from, to);
-        var request = new UsageRequest(meterIds, from, to);
-
-        using var response = await _http.PostAsJsonAsync("estimated_cost", request, JsonOptions, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
-
-        var cost = await response.Content.ReadFromJsonAsync<List<MeterCost>>(JsonOptions, cancellationToken);
-        return cost ?? [];
-    }
-
-    // SEV's estimate of the CO2 emitted for the electricity used, per hour, in kg. Same request as hourly_kwh_usage.
+    // SEV's estimate of the CO2 emitted for the electricity used, per hour, in kg.
     // Per SEV's documentation: (1 - the hour's green share of production) * kWh * 0.641 kg CO2/kWh.
-    public async Task<IReadOnlyList<MeterCo2>> GetEstimatedCo2Async(
-        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<MeterCo2>> GetEstimatedCo2Async(
+        IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken = default) =>
+        PostHourlyAsync<MeterCo2>("estimated_CO2", meterIds, from, to, cancellationToken);
+
+    // All hourly endpoints take the same request and return one entry per meter; only the reading type differs.
+    private async Task<IReadOnlyList<TMeter>> PostHourlyAsync<TMeter>(
+        string endpoint, IReadOnlyList<int> meterIds, DateTime from, DateTime to, CancellationToken cancellationToken)
     {
         ValidateRange(from, to);
-        var request = new UsageRequest(meterIds, from, to);
+        var request = new HourlyRequest(meterIds, from, to);
 
-        using var response = await _http.PostAsJsonAsync("estimated_CO2", request, JsonOptions, cancellationToken);
+        using var response = await _http.PostAsJsonAsync(endpoint, request, JsonOptions, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
 
-        var co2 = await response.Content.ReadFromJsonAsync<List<MeterCo2>>(JsonOptions, cancellationToken);
-        return co2 ?? [];
+        return await response.Content.ReadFromJsonAsync<List<TMeter>>(JsonOptions, cancellationToken) ?? [];
     }
 
     // The API works in local Faroese time and serializes DateTime as-is, so a Utc or Local

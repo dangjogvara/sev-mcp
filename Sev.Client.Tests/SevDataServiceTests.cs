@@ -556,60 +556,29 @@ public class SevDataServiceTests
         Assert.Equal(to.ToString("s", CultureInfo.InvariantCulture), body.RootElement.GetProperty("to_date").GetString());
     }
 
-    // An estimated_cost response with `hours` readings of 1.825 DKK from 00:00 for each (meter, day).
-    private static string CostJson(params (int Meter, DateOnly Day, int Hours)[] parts)
-    {
-        var meters = parts
-            .GroupBy(p => p.Meter)
-            .Select(g => new
-            {
-                meter_id = g.Key.ToString(),
-                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours).Select(h => new
-                {
-                    time_stamp = Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture),
-                    reading = 1.825m,
-                    unit = "DKR",
-                    price_unit = 1.825m,
-                    tarif = 310,
-                })),
-            });
-        return JsonSerializer.Serialize(meters);
-    }
+    // A hourly_kwh_usage response: 1 kWh per hour.
+    private static string UsageJson(params (int Meter, DateOnly Day, int Hours)[] parts) =>
+        HourlyJson(parts, time => new { time_stamp = time, reading = 1.0m, cumulative_value = (decimal?)null, unit = "kWh" });
 
-    // An estimated_CO2 response with `hours` readings of 0.5 kg CO2 from 00:00 for each (meter, day).
-    private static string Co2Json(params (int Meter, DateOnly Day, int Hours)[] parts)
-    {
-        var meters = parts
-            .GroupBy(p => p.Meter)
-            .Select(g => new
-            {
-                meter_id = g.Key.ToString(),
-                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours).Select(h => new
-                {
-                    time_stamp = Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture),
-                    reading = 0.5m,
-                    cumulative_value = (decimal?)null,
-                    unit = "Kg CO2",
-                })),
-            });
-        return JsonSerializer.Serialize(meters);
-    }
+    // An estimated_cost response: 1.825 DKK per hour.
+    private static string CostJson(params (int Meter, DateOnly Day, int Hours)[] parts) =>
+        HourlyJson(parts, time => new { time_stamp = time, reading = 1.825m, unit = "DKR", price_unit = 1.825m, tarif = 310 });
 
-    // A hourly_kwh_usage response with `hours` readings from 00:00 for each (meter, day).
-    private static string UsageJson(params (int Meter, DateOnly Day, int Hours)[] parts)
+    // An estimated_CO2 response: 0.5 kg CO2 per hour.
+    private static string Co2Json(params (int Meter, DateOnly Day, int Hours)[] parts) =>
+        HourlyJson(parts, time => new { time_stamp = time, reading = 0.5m, cumulative_value = (decimal?)null, unit = "Kg CO2" });
+
+    // A response from any hourly endpoint, with `hours` readings from 00:00 for each (meter, day).
+    // `reading` builds one reading from its time stamp, in that endpoint's shape.
+    private static string HourlyJson((int Meter, DateOnly Day, int Hours)[] parts, Func<string, object> reading)
     {
         var meters = parts
             .GroupBy(p => p.Meter)
             .Select(g => new
             {
                 meter_id = g.Key.ToString(),
-                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours).Select(h => new
-                {
-                    time_stamp = Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture),
-                    reading = 1.0m,
-                    cumulative_value = (decimal?)null,
-                    unit = "kWh",
-                })),
+                readings = g.SelectMany(p => Enumerable.Range(0, p.Hours)
+                    .Select(h => reading(Start(p.Day).AddHours(h).ToString("s", CultureInfo.InvariantCulture)))),
             });
         return JsonSerializer.Serialize(meters);
     }
