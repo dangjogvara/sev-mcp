@@ -27,7 +27,7 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 
 ## Configuration
 
-- `Sev` section (`SevOptions`): `User` and `Key` (required, the server refuses to start without them), and optional `CacheDirectory` and `MeterNicknames` (`Sev:MeterNicknames:<meter ID>`; `MeterNicknames` replaces SEV's nickname in `list_meters` and in meter matching for the usage tools; a key that isn't a number or an empty name stops the server at startup). User-secrets locally (loaded only in the Development environment, which the launch profile sets); `Sev__User` etc. as environment variables when hosted.
+- `Sev` section (`SevOptions`): `User` and `Key` (required, the server refuses to start without them), and optional `CacheDirectory` and `MeterNicknames` (`Sev:MeterNicknames:<meter ID>`; `MeterNicknames` replaces SEV's nickname in `list_meters` and in meter matching for the usage tools; a key that isn't a number, two keys for one meter (`0123` and `123`) or an empty name stop the server at startup). User-secrets locally (loaded only in the Development environment, which the launch profile sets); `Sev__User` etc. as environment variables when hosted.
 - `Auth` section (`AuthOptions`): the hosted login, see [Login](#login).
 - `MyUplink` section (`MyUplinkOptions`): optional `ClientId`, `ClientSecret` and `LogHourly`, see [Heat pump](#heat-pump-myuplink).
 - `docs/deploy-azure.md` has the full settings reference.
@@ -39,7 +39,7 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 References only go one way: `Sev.McpServer` → `Sev.Web` → `Sev.Core` → `Sev.Client` / `MyUplink.Client`. The compiler enforces it, so the pages can't use tool code and the core knows nothing about MCP or ASP.NET.
 
 - `Sev.Client`, `MyUplink.Client`: the two APIs.
-- `Sev.Core`: what both front ends (the MCP tools and the web pages) need: `Periods`, `FaroeseTime`, `HourlySummary`, `CostPrices`, `MeterSummary`, `MeterNicknames`, and `HeatPump/` (`HeatPumpLog`, `HeatPumpReadings`). Bad input throws `InvalidInputException`, whose message says what to fix.
+- `Sev.Core`: what both front ends (the MCP tools and the web pages) need: `Periods`, `FaroeseTime`, `HourlySummary`, `CostPrices`, `MeterSummary`, `MeterNicknames`, and `HeatPump/` (`HeatPumpLog`, `HeatPumpReadings`). Bad input throws `InvalidInputException`, whose message says what to fix. Dates and times are formatted with `CultureInfo.InvariantCulture` (in a format `:` is the culture's time separator, `.` in Danish).
 - `Sev.Web`: the Blazor pages (a Razor class library).
 - `Sev.McpServer`: the host (`Program.cs`, login, options, DI, the heat pump logger) and the MCP tools. It's the only app: everything runs in one process, see below.
 
@@ -116,7 +116,7 @@ Optional: registered only when `MyUplinkServices.AddMyUplinkIfConfigured` finds 
 - **Values:** `strVal` is the app's display text (the label for coded values), `-32768` means a sensor isn't connected, and some CTC parameters and categories have no English name ("Text not found: ..."). `Sev.Core/HeatPump/HeatPumpReadings` holds the rules: `ForStatus` (named and connected) and `ForLog` (also no settings, coded values or software versions).
 - **`get_heatpump_status`** (`Tools/HeatPumpTools.cs`) groups current values by category, gives coded values as their label, marks settings, and fetches alarms only when the system has one.
 - **History:** myUplink's history endpoints answered 403 with client credentials and with a user login (issue #96), so the server keeps its own.
-  - `Sev.McpServer/HeatPump/HeatPumpLogger` (a `BackgroundService`, on unless `MyUplink:LogHourly` is false) checks every 5 minutes and, when the current local hour has no sample, logs every device's `ForLog` readings in `Sev.Core/HeatPump/HeatPumpLog` (singleton, one sample per local hour, the repeated summer-time hour once).
+  - `Sev.McpServer/HeatPump/HeatPumpLogger` (a `BackgroundService`, on unless `MyUplink:LogHourly` is false) checks every 5 minutes and, for each device from myUplink's last answer without a sample for the current local hour, logs its `ForLog` readings in `Sev.Core/HeatPump/HeatPumpLog` (singleton, one sample per local hour, the repeated summer-time hour once).
   - A device that isn't connected (`HeatPumpReadings.IsOffline`) is skipped with a warning: myUplink still answers with its last values, which would otherwise be logged as new readings. Its hours become missing, and with no device logged the next check tries again.
   - With `Sev:CacheDirectory` the log is saved as one JSON file per month there (`HeatPumpLog-2026-11.json`, temp file + rename, unreadable files ignored); without, memory only. It can't be fetched again if lost, hence the backups.
   - `get_heatpump_history` (`Tools/HeatPumpHistoryTools.cs`) takes the same `from` / `to` / `granularity` as `get_usage`, defaults to readings with "outdoor" in the name (or `all`, or names / parts of names), gives `value` per hour and `average` / `min` / `max` per day or month, and counts hours since logging started without a sample as `missingHours`, never as zero.

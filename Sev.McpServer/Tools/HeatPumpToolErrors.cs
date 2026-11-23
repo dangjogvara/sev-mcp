@@ -20,9 +20,12 @@ public static class HeatPumpToolErrors
         }
     }
 
+    // A 400 means wrong credentials only at the login; elsewhere it's an ordinary error, shown with myUplink's answer.
     public static string Describe(MyUplinkApiException ex) => ex.StatusCode switch
     {
-        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden or HttpStatusCode.BadRequest =>
+        HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden =>
+            "myUplink rejected the server's application credentials (MyUplink client ID or secret), or refused access. They need to be checked.",
+        HttpStatusCode.BadRequest when ex.AtLogin =>
             "myUplink rejected the server's application credentials (MyUplink client ID or secret), or refused access. They need to be checked.",
         HttpStatusCode.TooManyRequests =>
             "myUplink allows 25 calls per minute and they are used up."

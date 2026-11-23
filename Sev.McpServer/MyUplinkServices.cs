@@ -22,11 +22,11 @@ public static class MyUplinkServices
 
         // One token provider for the whole server, with its own long-lived HttpClient for logging in;
         // PooledConnectionLifetime makes it pick up DNS changes.
-        builder.Services.AddSingleton(_ =>
+        builder.Services.AddSingleton(sp =>
         {
             var network = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(15) };
             var http = new HttpClient(network) { BaseAddress = MyUplinkClient.DefaultBaseAddress };
-            return new MyUplinkTokenProvider(http, options.ClientId!, options.ClientSecret!);
+            return new MyUplinkTokenProvider(http, options.ClientId!, options.ClientSecret!, sp.GetRequiredService<TimeProvider>());
         });
         builder.Services.AddHttpClient<MyUplinkClient>(http => http.BaseAddress = MyUplinkClient.DefaultBaseAddress);
 

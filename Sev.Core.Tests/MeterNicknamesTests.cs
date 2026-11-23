@@ -33,6 +33,14 @@ public class MeterNicknamesTests
         Assert.Same(meters, MeterNicknames.None.Apply(meters));
     }
 
+    [Fact]
+    public void Problems_TwoKeysForTheSameMeter()
+    {
+        var problems = MeterNicknames.Problems(new Dictionary<string, string> { ["0123"] = "House", ["123"] = "Garage" });
+
+        Assert.Equal(["Sev:MeterNicknames has more than one key for meter 123: 0123, 123."], problems);
+    }
+
     [Theory]
     [InlineData("abc", "House", "isn't a meter ID")]
     [InlineData("-1", "House", "isn't a meter ID")]

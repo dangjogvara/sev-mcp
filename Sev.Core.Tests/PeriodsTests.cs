@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Globalization;
 using Sev.Core;
 
 namespace Sev.Core.Tests;
@@ -63,6 +65,29 @@ public class PeriodsTests
         var ex = Assert.Throws<InvalidInputException>(() => Periods.ParseRange(from, to, granularity));
 
         Assert.Contains(expectedInMessage, ex.Message);
+    }
+
+    [Theory]
+    [InlineData("da-DK")]
+    [InlineData("fi-FI")]
+    [InlineData("th-TH")]
+    public void Key_IsTheSameInEveryCulture(string culture)
+    {
+        // In a format ':' is the culture's time separator ('.' in Danish), and Thai uses another calendar.
+        var before = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = new CultureInfo(culture);
+            var time = new DateTime(2026, 10, 10, 5, 0, 0);
+
+            Assert.Equal("2026-10-10T05:00", Periods.Key(time, Granularity.Hour));
+            Assert.Equal("2026-10-10", Periods.Key(time, Granularity.Day));
+            Assert.Equal("2026-10", Periods.Key(time, Granularity.Month));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = before;
+        }
     }
 
     // --- Expected hours ---

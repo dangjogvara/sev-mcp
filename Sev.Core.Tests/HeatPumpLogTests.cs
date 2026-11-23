@@ -37,10 +37,31 @@ public class HeatPumpLogTests : IDisposable
         log.Add("DEV1", "CTC", Hour, [Outdoor(5)]);
         log.Add("DEV1", "CTC", Hour, [Outdoor(9)]);
 
-        Assert.True(log.HasSample(Hour));
-        Assert.False(log.HasSample(Hour.AddHours(1)));
+        Assert.True(log.HasSample("DEV1", Hour));
+        Assert.False(log.HasSample("DEV1", Hour.AddHours(1)));
         var sample = Assert.Single(Assert.Single(log.Snapshot()).Samples);
         Assert.Equal(5, sample.Values["62000"]);
+    }
+
+    [Fact]
+    public void HasSample_IsPerDevice()
+    {
+        var log = new HeatPumpLog();
+
+        log.Add("DEV1", "CTC", Hour, [Outdoor(5)]);
+
+        Assert.True(log.HasSample("DEV1", Hour));
+        Assert.False(log.HasSample("DEV2", Hour));
+    }
+
+    [Fact]
+    public void Add_ParameterTwiceInOneAnswer_KeepsTheSample()
+    {
+        var log = new HeatPumpLog();
+
+        log.Add("DEV1", "CTC", Hour, [Outdoor(5), Outdoor(6)]);
+
+        Assert.Equal(6, Assert.Single(Assert.Single(log.Snapshot()).Samples).Values["62000"]);
     }
 
     [Fact]
@@ -73,6 +94,24 @@ public class HeatPumpLogTests : IDisposable
         Assert.Contains(_messages, m => m.StartsWith("Ignoring"));
     }
 
+    [Theory]
+    [InlineData("\"22-11-2026 18:00\"")]
+    [InlineData("null")]
+    [InlineData("18")]
+    public void FileWithBadHour_IsIgnored_OthersAreLoaded(string hour)
+    {
+        var good = new HeatPumpLog(_directory);
+        good.Add("DEV1", "CTC", new DateTime(2026, 10, 31, 23, 0, 0), [Outdoor(4)]);
+        File.WriteAllText(Path.Combine(_directory, "HeatPumpLog-2026-11.json"),
+            """{"version":1,"devices":[{"deviceId":"DEV1","product":"CTC","parameters":[],"samples":[{"hour":"""
+            + hour + ""","values":{"62000":3}}]}]}""");
+
+        var log = new HeatPumpLog(_directory, _messages.Add);
+
+        Assert.Single(Assert.Single(log.Snapshot()).Samples);
+        Assert.Contains(_messages, m => m.StartsWith("Ignoring") && m.Contains("HeatPumpLog-2026-11.json"));
+    }
+
     [Fact]
     public void WithoutDirectory_NothingIsWritten()
     {
@@ -81,7 +120,7 @@ public class HeatPumpLogTests : IDisposable
         log.Add("DEV1", "CTC", Hour, [Outdoor(5)]);
 
         Assert.False(Directory.Exists(_directory));
-        Assert.True(log.HasSample(Hour));
+        Assert.True(log.HasSample("DEV1", Hour));
     }
 
     // --- Sampling ---

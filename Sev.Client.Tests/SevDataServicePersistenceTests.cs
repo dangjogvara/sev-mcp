@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 
 namespace Sev.Client.Tests;
@@ -65,6 +66,20 @@ public partial class SevDataServiceTests : IDisposable
 
         Assert.Equal(JsonSerializer.Serialize(before), JsonSerializer.Serialize(after));
         Assert.Equal(2, _handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Persisted_DaysFetchedBeforeALaterPieceFails()
+    {
+        // 60 days: the newest 31 arrive, the older piece fails. The calls already made mustn't be lost on restart.
+        _handler.Respond(UsageJson(DaysOf(1111, Day(-31), 31)));
+        _handler.Respond("oops", HttpStatusCode.InternalServerError);
+        await Assert.ThrowsAsync<SevApiException>(() => StartServer().GetHourlyUsageAsync([1111], Start(Day(-60)), Start(Today)));
+
+        var after = await StartServer().GetHourlyUsageAsync([1111], Start(Day(-31)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.Equal(31 * 24, after.Meters.Single().Readings.Count);
     }
 
     [Fact]
