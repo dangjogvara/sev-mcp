@@ -66,7 +66,7 @@ public class LoginTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal(Resource, json.RootElement.GetProperty("resource").GetString());
         Assert.Equal([Issuer], json.RootElement.GetProperty("authorization_servers").EnumerateArray().Select(e => e.GetString()));
-        Assert.Equal([Scope], json.RootElement.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString()));
+        Assert.Equal([Scope, "offline_access"], json.RootElement.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString()));
     }
 
     [Fact]
@@ -94,6 +94,8 @@ public class LoginTests
     [InlineData("")]
     [InlineData("other.scope")]
     [InlineData("mcp.access.extra")]
+    // Offered for the refresh token, but not enough to get in on its own.
+    [InlineData("offline_access")]
     public async Task TokenWithoutRequiredScope_IsForbidden(string? scope)
     {
         using var factory = Server(withAuth: true);

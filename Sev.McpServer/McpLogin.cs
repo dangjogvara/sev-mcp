@@ -16,6 +16,9 @@ public static class McpLogin
 {
     public const string AllowedUsersPolicy = "AllowedUsers";
 
+    // The OpenID Connect scope that makes the authorization server issue a refresh token.
+    public const string OfflineAccess = "offline_access";
+
     // Reads the Auth section and adds the login when it's configured (hosted). Without it the server only
     // allows local use, and outside Development it refuses to start, so it can't go online unprotected.
     public static AuthOptions AddLoginIfConfigured(this WebApplicationBuilder builder)
@@ -82,6 +85,13 @@ public static class McpLogin
                 foreach (var scope in auth.Scopes)
                 {
                     metadata.ScopesSupported.Add(scope);
+                }
+                // Entra only issues a refresh token when offline_access is requested. Without it Claude's access
+                // runs out with the access token (60-90 minutes) and the user has to reconnect. It isn't checked
+                // in tokens: the policy below still requires one of Auth:Scopes.
+                if (!metadata.ScopesSupported.Contains(OfflineAccess))
+                {
+                    metadata.ScopesSupported.Add(OfflineAccess);
                 }
                 options.ResourceMetadata = metadata;
             });
