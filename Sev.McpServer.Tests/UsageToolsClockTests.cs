@@ -28,7 +28,7 @@ public class UsageToolsClockTests
         var clock = new SteppingClock(beforeTheHour, beforeTheHour, beforeTheHour.AddSeconds(2));
         var handler = new CannedSev(Meters);
         var data = new SevDataService(new SevClient(new HttpClient(handler) { BaseAddress = SevClient.DefaultBaseAddress }), new SevCache(clock));
-        var tools = new UsageTools(data, clock);
+        var tools = new UsageTools(data, clock, MeterNicknames.None);
 
         var meter = Assert.Single(await tools.GetUsageAsync("2026-11-21", "2026-11-22", "day"));
 

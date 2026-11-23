@@ -17,7 +17,7 @@ This is an unofficial, personal project, not made or endorsed by SEV. There's no
 | `get_heatpump_status` | *Optional, with myUplink.* The heat pump's temperatures, status, settings and alarms right now. |
 | `get_heatpump_history` | *Optional, with myUplink.* Past heat pump readings, such as outdoor temperature, from the server's own hourly log. |
 
-Periods are given as dates or date-times in Faroese local time, per hour, day or month (up to 31 days by hour, 366 by day or 731 by month per question). Meters can be picked by ID, nickname or part of the address, or left out for all of them. Missing data is never shown as zero: results say how many hours have no reading.
+Periods are given as dates or date-times in Faroese local time, per hour, day or month (up to 31 days by hour, 366 by day or 731 by month per question). Meters can be picked by ID, nickname or part of the address, or left out for all of them; if SEV's portal can't name your meters, you can give them nicknames in the server's settings (`Sev:MeterNicknames:<meter ID>`, see the [settings reference](docs/deploy-azure.md#settings-reference)). Missing data is never shown as zero: results say how many hours have no reading.
 
 ## Ways to run it
 
