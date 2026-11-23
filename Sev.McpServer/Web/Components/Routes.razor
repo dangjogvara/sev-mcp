@@ -1,0 +1,6 @@
+@* Finds the page whose @page matches the URL and shows it inside MainLayout. *@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+    </Found>
+</Router>

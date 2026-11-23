@@ -68,7 +68,7 @@ dotnet build
 dotnet test
 ```
 
-The tests never call the real APIs. To try the client against the live API, put `SEV_USER` and `SEV_KEY` in `.env` and run `set -a; source .env; set +a; dotnet run --project Sev.SmokeTest`; keep it to a few runs at a time because of the rate limit.
+A small web frontend (Blazor) is in progress at http://localhost:5133/usage while the server runs locally; it isn't available on a hosted server yet. The tests never call the real APIs. To try the client against the live API, put `SEV_USER` and `SEV_KEY` in `.env` and run `set -a; source .env; set +a; dotnet run --project Sev.SmokeTest`; keep it to a few runs at a time because of the rate limit.
 
 | Project | Purpose |
 |---|---|

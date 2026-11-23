@@ -1,0 +1,20 @@
+@page "/usage"
+@* @inject asks dependency injection for a service, like a constructor parameter in a tool class. *@
+@inject TimeProvider Time
+
+<PageTitle>Usage</PageTitle>
+
+<h1>Usage</h1>
+
+<p>Today in the Faroes: @today.ToString("yyyy-MM-dd")</p>
+
+<p class="todo">Next: daily kWh per meter for the last 30 days.</p>
+
+@code {
+    // Runs once before the page is rendered. Data from SEV would be loaded here (OnInitializedAsync, through
+    // SevDataService, never SevClient), so the page is built with it.
+    private DateOnly today;
+
+    protected override void OnInitialized() =>
+        today = DateOnly.FromDateTime(SevTime.LocalNow(Time));
+}

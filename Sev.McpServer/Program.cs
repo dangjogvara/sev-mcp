@@ -4,6 +4,7 @@ using ModelContextProtocol;
 using Sev.Client;
 using Sev.McpServer;
 using Sev.McpServer.Tools;
+using Sev.McpServer.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,8 +37,12 @@ if (heatPump)
     mcp.WithTools<HeatPumpTools>(toolJsonOptions).WithTools<HeatPumpHistoryTools>(toolJsonOptions);
 }
 
+// Web pages (Blazor), local only until they have a login. See WebSetup.
+builder.AddSevWeb();
+
 var app = builder.Build();
 app.MapMcpEndpoint(auth);
+app.MapSevWeb(auth);
 
 // For App Service's Always On (which pings "/") and Health check ("/health"): they answer 200 without a login,
 // and without calling SEV or myUplink, so they never use up a rate limit.
