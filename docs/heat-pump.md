@@ -37,7 +37,7 @@ So the server keeps its own history. Every 5 minutes it checks whether the curre
 
 - **It starts when you switch it on.** There's no history from before; `get_heatpump_history` says when logging started.
 - **It's kept with the cache.** With `Sev__CacheDirectory` set (hosted: `/home/data/sev-cache`), the log is saved there as one file per month (`HeatPumpLog-2026-11.json`) and survives restarts and deploys. Without it (normal locally), it's kept in memory and lost when the server stops.
-- **Hours without a sample** (the server was down, or myUplink didn't answer) are reported as missing, never as zero.
+- **Hours without a sample** (the server was down, myUplink didn't answer, or the heat pump had lost its connection to myUplink) are reported as missing, never as zero.
 - **It can't be fetched again** if it's lost, so the hosted setup backs it up daily (see [Backups](deploy-azure.md#backups)).
 - **To switch it off,** set `MyUplink:LogHourly` (`MyUplink__LogHourly` hosted) to `false`.
 

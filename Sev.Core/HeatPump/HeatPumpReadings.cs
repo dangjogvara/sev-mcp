@@ -15,6 +15,11 @@ public static class HeatPumpReadings
     public static bool HasName(string? name) =>
         !string.IsNullOrWhiteSpace(name) && !name.StartsWith("Text not found", StringComparison.Ordinal);
 
+    // A device that has lost its connection to myUplink ("Disconnected") still has values: the last ones it
+    // reported, which aren't readings of now. A device without a state counts as connected.
+    public static bool IsOffline(MyUplinkDevice device) =>
+        device.ConnectionState is { } state && !state.Equals("Connected", StringComparison.OrdinalIgnoreCase);
+
     public static bool ForStatus(DataPoint point) => HasName(point.ParameterName) && point.Value != NotConnected;
 
     // Settings, coded values (status, mode) and software versions (numbers, but not measurements) are left

@@ -55,12 +55,11 @@ public class HeatPumpTools(MyUplinkClient myUplink)
                     .GroupBy(point => HeatPumpReadings.HasName(point.Category) ? point.Category! : "Other")
                     .Select(group => new HeatPumpCategory(group.Key, group.Select(ToValue).ToList()))
                     .ToList();
-                var offline = device.ConnectionState is { } state && !state.Equals("Connected", StringComparison.OrdinalIgnoreCase);
                 return new HeatPumpDeviceResult(
                     device.Product?.Name,
                     device.ConnectionState,
                     categories,
-                    offline ? "The device isn't connected to myUplink, so these are the last values it reported." : null);
+                    HeatPumpReadings.IsOffline(device) ? "The device isn't connected to myUplink, so these are the last values it reported." : null);
             })
             .ToList();
 
