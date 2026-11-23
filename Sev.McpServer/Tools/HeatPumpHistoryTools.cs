@@ -21,7 +21,7 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         "Per hour you get value; per day or month the average, min and max of the logged hours. For counters such as " +
         "operation time, max - min is the increase in the period. Leave out 'parameters' for outdoor temperature only; " +
         "otherwise give names (or parts of names) as shown by get_heatpump_status, or 'all'. Settings and status codes " +
-        "aren't logged. If missingHours is above 0, some hours have no sample (server down or myUplink not answering): " +
+        "aren't logged. If missingHours is above 0, some hours have no sample (heat pump offline, server down or myUplink not answering): " +
         "say so rather than presenting the result as complete.")]
     public IReadOnlyList<HeatPumpHistoryResult> GetHeatPumpHistory(
         [Description("Start, inclusive. A date (2026-10-10) or date-time (2026-10-10T06:00) in Faroese local time.")] string from,
@@ -70,7 +70,7 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         var missingTotal = expected.Count(h => !samples.ContainsKey(h));
         if (missingTotal > 0)
         {
-            notes.Add($"{missingTotal} of {expected.Count} hours since then have no sample (server down or myUplink not answering).");
+            notes.Add($"{missingTotal} of {expected.Count} hours since then have no sample (heat pump offline, server down or myUplink not answering).");
         }
 
         return new HeatPumpHistoryResult(

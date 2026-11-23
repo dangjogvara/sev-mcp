@@ -24,12 +24,31 @@ public class HeatPumpHistoryTests
             """{"systems":[{"systemId":"SYS1","name":"Home","hasAlarm":false,"devices":[{"id":"DEV1","connectionState":"Connected","product":{"name":"CTC"}}]}]}""",
             """[{"category":"General","parameterId":"62000","parameterName":"Outdoor Temperature","parameterUnit":"°C","writable":false,"value":5.5}]""");
 
-        var devices = await HeatPumpLogger.TakeSampleAsync(client, log, Hour, CancellationToken.None);
+        var sample = await HeatPumpLogger.TakeSampleAsync(client, log, Hour, CancellationToken.None);
 
-        Assert.Equal(1, devices);
+        Assert.Equal(1, sample.Logged);
+        Assert.Empty(sample.Offline);
         var device = Assert.Single(log.Snapshot());
         Assert.Equal("CTC", device.Product);
         Assert.Equal(5.5, Assert.Single(device.Samples).Values["62000"]);
+    }
+
+    [Fact]
+    public async Task TakeSample_SkipsADeviceThatIsntConnected()
+    {
+        // myUplink still answers with the last values a disconnected device reported; they mustn't be logged as
+        // this hour's, so the hour stays missing (and the logger tries again at the next check).
+        var log = new HeatPumpLog();
+        var client = ClientAnswering(
+            """{"systems":[{"systemId":"SYS1","name":"Home","hasAlarm":false,"devices":[{"id":"DEV1","connectionState":"Disconnected","product":{"name":"CTC"}}]}]}""",
+            """[{"category":"General","parameterId":"62000","parameterName":"Outdoor Temperature","parameterUnit":"°C","writable":false,"value":5.5}]""");
+
+        var sample = await HeatPumpLogger.TakeSampleAsync(client, log, Hour, CancellationToken.None);
+
+        Assert.Equal(0, sample.Logged);
+        Assert.Equal(["CTC"], sample.Offline);
+        Assert.Empty(log.Snapshot());
+        Assert.False(log.HasSample(Hour));
     }
 
     // --- get_heatpump_history ---

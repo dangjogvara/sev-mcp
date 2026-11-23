@@ -21,6 +21,14 @@ public class HeatPumpLogTests : IDisposable
 
     // --- The log ---
 
+    [Theory]
+    [InlineData("Connected", false)]
+    [InlineData("connected", false)]
+    [InlineData(null, false)]
+    [InlineData("Disconnected", true)]
+    public void IsOffline_OnlyWhenTheStateIsntConnected(string? state, bool offline) =>
+        Assert.Equal(offline, HeatPumpReadings.IsOffline(new MyUplinkDevice("DEV1", state, null, null)));
+
     [Fact]
     public void Add_RecordsTheHourOnce()
     {
