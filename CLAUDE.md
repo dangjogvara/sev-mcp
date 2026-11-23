@@ -18,7 +18,7 @@ dotnet test                                    # run all tests (no network)
 set -a; source .env; set +a; dotnet run --project Sev.SmokeTest   # run against the live API
 dotnet user-secrets set "Sev:User" "..." --project Sev.McpServer  # one-time: credentials for the server
 dotnet user-secrets set "Sev:Key" "..." --project Sev.McpServer
-dotnet run --project Sev.McpServer --launch-profile http          # MCP server on http://localhost:5133/mcp
+dotnet run --project Sev.McpServer --launch-profile http          # MCP server on http://localhost:5133/mcp, web pages at /usage
 claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude Code to the local server
 ```
 
@@ -110,6 +110,15 @@ Optional: registered only when `MyUplinkServices.AddMyUplinkIfConfigured` finds 
   - With `Sev:CacheDirectory` the log is saved as one JSON file per month there (`HeatPumpLog-2026-11.json`, temp file + rename, unreadable files ignored); without, memory only. It can't be fetched again if lost, hence the backups.
   - `get_heatpump_history` (`Tools/HeatPumpHistoryTools.cs`) takes the same `from` / `to` / `granularity` as `get_usage`, defaults to readings with "outdoor" in the name (or `all`, or names / parts of names), gives `value` per hour and `average` / `min` / `max` per day or month, and counts hours since logging started without a sample as `missingHours`, never as zero.
   - Tests that start the server with myUplink configured must set `MyUplink:LogHourly=false`, or the logger calls myUplink.
+
+### Web pages (Blazor)
+
+A small frontend, a learning project in progress (issue #117 has the skeleton).
+
+- Lives in `Sev.McpServer/Web/` (`WebSetup.AddSevWeb` / `MapSevWeb`, `Components/` with `App`, `Routes`, `Layout/`, `Pages/`) plus `Sev.McpServer/wwwroot/`. Same app as the tools on purpose: the rate-limit count, logins, cache and heat pump log are in-memory singletons, so a separate app would have its own count and could go over SEV's limit with the server.
+- Static server-side rendering (`AddRazorComponents` without interactivity): plain HTML, no JavaScript or WebAssembly.
+- **Local only:** `MapSevWeb` maps nothing when `Auth` is set, since the pages have no browser login yet (`WebTests` checks both modes). Locally `AllowedHosts` and `LocalOrigin` already limit them to this machine.
+- Pages load data through `SevDataService` (never `SevClient`), and keep calculations in plain C# classes that can be tested without a browser; the `.razor` files only show the data.
 
 ### Tests and smoke test
 
