@@ -5,7 +5,7 @@ This puts SEV MCP online so you can use it from the Claude web and mobile apps. 
 How it fits together:
 
 - **Azure App Service** runs the server at `https://<app>-<hash>.<region>.azurewebsites.net/mcp`.
-- **An Entra app registration** ("SEV MCP") is what Claude logs in with. Its tokens are checked by the server (see `McpLogin`).
+- **Two Entra app registrations:** "SEV MCP" stands for the server (the API the tokens are for), and "SEV MCP (Claude)" is what Claude logs in with. The server checks the tokens (see `McpLogin`). They're separate because Entra won't renew a token an app asked for itself when it's named by its URL (AADSTS90009), and Claude names the server by its URL.
 - **GitHub Actions** deploys `main` after the tests pass. It logs in to Azure with a short-lived GitHub token through a federated credential, so no password is stored anywhere.
 
 ## 1. Before you start
@@ -35,13 +35,16 @@ If you change `RESOURCE_GROUP` or `LOCATION`, pass the same values every time yo
 What it does:
 
 1. Creates the resource group `sev-mcp`, the Linux App Service plan `sev-mcp-plan` (B1), and the web app. The web app gets .NET 10, HTTPS only, Always On (so the app isn't put to sleep when idle, which would drop the SEV login and the rate-limit count), a [Health check](#health-check) on `/health`, TLS 1.2 and FTP disabled.
-2. Creates the Entra app registration "SEV MCP", the login Claude uses:
+2. Creates the Entra app registration "SEV MCP", the server's API:
    - single tenant
-   - Claude's callback URL `https://claude.ai/api/mcp/auth_callback`
    - v2 access tokens
    - an `mcp.access` scope
    - the MCP URL as an extra Application ID URI. Claude sends it as the token's `resource`, and Entra rejects it otherwise.
-3. Creates a client secret for Claude, on the first run only.
+3. Creates the Entra app registration "SEV MCP (Claude)", the login Claude uses:
+   - single tenant
+   - Claude's callback URL `https://claude.ai/api/mcp/auth_callback`
+   - permission to the API's `mcp.access` scope, pre-authorized by the API so signing in doesn't ask for it
+   - a client secret, on the first run only
 4. Sets the app settings:
    - your SEV credentials
    - `Auth__Authority`, `Auth__Resource`, `Auth__Audiences__0`, `Auth__Scopes__0`
@@ -53,7 +56,7 @@ What it does:
 6. Creates that GitHub environment (limited to `main`), its secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` and `AZURE_SUBSCRIPTION_ID`, and the repository variable `AZURE_WEBAPP_NAME`. The deploy job runs only once this variable exists.
 7. Sets up a daily backup of the app (`deploy/setup-backup.sh`), see [Backups](#backups).
 
-At the end it prints the MCP URL, the client ID and the client secret. **The secret is shown only once:** copy it into Claude (step 4), then clear your terminal.
+At the end it prints the MCP URL, Claude's client ID and the client secret. **The secret is shown only once:** copy it into Claude (step 4), then clear your terminal.
 
 The script is safe to run again, for example after changing a setting. It reuses what exists, and doesn't create a new secret.
 
@@ -76,14 +79,15 @@ curl https://<your-host>/.well-known/oauth-protected-resource/mcp
 In Claude (web or desktop app): **Settings > Connectors > Add custom connector**.
 
 - **URL:** the MCP URL printed by the script, e.g. `https://sev-mcp-abc123.northeurope-01.azurewebsites.net/mcp`
-- **OAuth client:** use your own, and enter the client ID and client secret from the script
+- **OAuth client:** use your own, and enter the client ID and client secret from the script (those of "SEV MCP (Claude)")
 
-When you connect, Claude opens Microsoft's sign-in page. Sign in with the account you ran the script with, and accept the "Use SEV MCP" permission. The connector then works in the Claude mobile app too.
+When you connect, Claude opens Microsoft's sign-in page. Sign in with the account you ran the script with; if it asks, accept the permissions. The connector then works in the Claude mobile app too.
 
 ## Keeping it up to date
 
 - **New versions:** on GitHub, press **Sync fork** on your fork (or merge from this repository). The push to `main` runs the tests and deploys.
 - **New tools:** Claude keeps the list of tools from when the connector was connected. After an update that adds tools, open **Settings > Connectors**, disconnect the connector and connect it again, then start a new chat.
+- **From one app registration to two (issue #123):** setups from before then have Claude log in with "SEV MCP" itself, and Entra refuses to renew those logins, so the connector asks you to sign in again every hour or two. Run the setup script again with the same `RESOURCE_GROUP`, `LOCATION` and `APP`: it creates "SEV MCP (Claude)" with a client secret and removes Claude's callback from "SEV MCP". In Claude, remove the connector and add it again with the new client ID and secret. Then delete the old client secret on "SEV MCP" (Entra portal > App registrations > SEV MCP > Certificates & secrets).
 - **New settings:** if an update adds settings, run the setup script again with the same `RESOURCE_GROUP`, `LOCATION` and `APP`. It reuses everything and doesn't create a new client secret.
 - **Package updates:** Dependabot opens PRs for new package versions in this repository, and syncing your fork brings them in. In a fork Dependabot may be off; turn it on under Settings > Code security if you want its PRs there too.
 
@@ -130,8 +134,8 @@ The setup script sets these app settings (environment variables). You only need 
 | `Sev__User`, `Sev__Key` | from SEV | Your SEV API user name and key. Required. |
 | `Auth__Authority` | `https://login.microsoftonline.com/<tenant-id>/v2.0` | The token issuer (v2 tokens). Without the `Auth` settings the server only accepts local use, and outside Development it refuses to start. |
 | `Auth__Resource` | `https://<app>.azurewebsites.net/mcp` | The public MCP URL, exactly as entered in Claude. |
-| `Auth__Audiences__0` | `<client-id>` | Accepted token audience: the Entra app registration's client ID. |
-| `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
+| `Auth__Audiences__0` | `<api-id>` | Accepted token audience: the application (client) ID of the "SEV MCP" app registration, not Claude's. |
+| `Auth__Scopes__0` | `api://<api-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
 | `Auth__AllowedUsers__0`, `__1`, ... | `<Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
 | `Sev__MeterNicknames__<meter ID>` | `House` | A nickname for the meter with that ID (as `list_meters` shows it), replacing SEV's. One setting per meter. Optional. |
@@ -148,14 +152,14 @@ The setup script sets these app settings (environment variables). You only need 
 - **"Operation cannot be completed without additional quota" (B1 limit 0):** new subscriptions often have no App Service quota in some regions. Either request 1 B1 instance at https://aka.ms/azure-quota (provider App Service, your region) and run the script again, or run it again in another region, e.g. `LOCATION=swedencentral ./deploy/setup-azure.sh`.
 - **The deploy job fails at "Azure login" with AADSTS700213 ("No matching federated identity record"):** the deploy identity trusts a different token subject than GitHub sends. The log shows the subject GitHub sent (`subject claim - repo:...`). Repositories with GitHub's immutable, ID-based subjects send `repo:<owner>@<id>/<repo>@<id>:environment:production`; the script reads the right form from GitHub and fixes an existing credential, so running it again (with the same settings) is enough. Then rerun the failed job.
 - **The server doesn't start:** look for "Invalid Auth configuration" or "requires a login" in the log. One of the `Auth__` app settings is missing or wrong. Re-running the script sets them again.
-- **AADSTS9010010 or `invalid_target` during sign-in:** Entra doesn't recognise the `resource` Claude sent. Check that the app registration's Application ID URIs include the MCP URL exactly (no trailing slash), and that `requestedAccessTokenVersion` is 2 in its manifest.
+- **AADSTS9010010 or `invalid_target` during sign-in:** Entra doesn't recognise the `resource` Claude sent. Check that the "SEV MCP" app registration's Application ID URIs include the MCP URL exactly (no trailing slash), and that `requestedAccessTokenVersion` is 2 in its manifest.
 - **The script fails at "Application ID URI":** your tenant has a policy against non-verified URIs. Check that the token version really is 2 (the exemption depends on it), or ask your tenant admin about an exemption.
-- **403 after signing in:** you signed in with a different account than the one in `Auth__AllowedUsers__0`, or the token lacks the `mcp.access` scope. Check that `Auth__Scopes__0` is `api://<client-id>/mcp.access` and that the app registration still exposes the `mcp.access` scope (re-running the script sets both).
-- **The connector asks you to sign in again about every hour:** Claude has no refresh token. The server asks for one (`offline_access` in its login metadata) since issue #115; if you connected before that, disconnect and connect the connector once, and accept "Maintain access to data you have given it access to".
+- **403 after signing in:** you signed in with a different account than the one in `Auth__AllowedUsers__0`, or the token lacks the `mcp.access` scope. Check that `Auth__Scopes__0` is `api://<api-id>/mcp.access` and that "SEV MCP" still exposes the `mcp.access` scope (re-running the script sets both).
+- **The connector asks you to sign in again every hour or two:** Claude couldn't renew its login. Since issue #115 the server asks for a refresh token (`offline_access` in its login metadata); if you connected before that, disconnect and connect the connector once. If Entra's sign-in log (Entra ID > Monitoring > Sign-in logs > User sign-ins (non-interactive)) shows AADSTS90009, Claude is logging in with "SEV MCP" itself: move to two app registrations, see [Keeping it up to date](#keeping-it-up-to-date).
 - **The connector keeps asking you to sign in:** the log shows why each token was rejected (audience, issuer, expiry). Also check that the client secret in Claude hasn't expired (it's valid for 2 years).
 - **New client secret:** this adds a new secret alongside the old one; enter it in Claude, then delete the old one in the Entra portal.
   ```bash
-  az ad app credential reset --id <client-id> --display-name "Claude connector" --years 2 --append --query password -o tsv
+  az ad app credential reset --id <claude-client-id> --display-name "Claude connector" --years 2 --append --query password -o tsv
   ```
 
 ## Backups
@@ -187,7 +191,8 @@ The B1 plan is the main cost; the backup storage adds a few cents a month. To de
 ```bash
 az group delete --name sev-mcp
 az group delete --name sev-mcp-backup
-az ad app delete --id <client-id>
+az ad app delete --id <api-id>
+az ad app delete --id <claude-client-id>
 ```
 
 The backup group is separate on purpose: delete it only if you don't want the backups any more.

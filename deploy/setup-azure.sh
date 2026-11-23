@@ -7,8 +7,8 @@
 # Use the same ones every time you run it (RESOURCE_GROUP in particular), or it sets up a second copy.
 #
 # It's safe to run again: existing resources are reused, and settings are brought up to date.
-# It creates a client secret for Claude only the first time (the Entra app is new); see the guide
-# for making a new one.
+# It creates a client secret for Claude only the first time (Claude's Entra app is new); see the
+# guide for making a new one.
 set -euo pipefail
 
 LOCATION="${LOCATION:-northeurope}"
@@ -17,6 +17,7 @@ PLAN="${PLAN:-sev-mcp-plan}"
 SKU="${SKU:-B1}"
 APP="${APP:-sev-mcp}"
 ENTRA_APP_NAME="${ENTRA_APP_NAME:-SEV MCP}"
+CLIENT_APP_NAME="${CLIENT_APP_NAME:-SEV MCP (Claude)}"
 DEPLOY_IDENTITY="${DEPLOY_IDENTITY:-sev-mcp-deploy}"
 # The GitHub repository that deploys: by default the one this checkout came from (your fork).
 GITHUB_REPO="${GITHUB_REPO:-$(git remote get-url origin 2>/dev/null | sed -E 's#^(git@github\.com:|https://github\.com/)##; s#\.git$##')}"
@@ -99,24 +100,34 @@ HOST="$(az webapp show -g "$RESOURCE_GROUP" -n "$APP" --query defaultHostName -o
 RESOURCE="https://$HOST/mcp"
 echo "MCP URL: $RESOURCE"
 
-# --- Entra app registration: the login Claude uses -----------------------------------------
+# --- Entra app registrations: the server's API and Claude's login ---------------------------
+#
+# Two registrations: "SEV MCP" is the API the tokens are for (the mcp.access scope, the MCP URL as
+# an Application ID URI), and "SEV MCP (Claude)" is the client Claude signs in with. They must be
+# separate: Claude sends the MCP URL as the "resource", and Entra refuses an app a token for itself
+# unless it's named by its api://<guid> URI (AADSTS90009), which broke Claude's token refresh.
 
-step "Entra app registration '$ENTRA_APP_NAME'"
-APP_ID="$(az ad app list --filter "displayName eq '$ENTRA_APP_NAME'" --query '[0].appId' -o tsv)"
-NEW_APP=false
+app_id_named() { az ad app list --filter "displayName eq '$1'" --query '[0].appId' -o tsv; }
+ensure_sp() { az ad sp show --id "$1" -o none 2>/dev/null || az ad sp create --id "$1" -o none; }
+patch_app() {
+  az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$1" \
+    --headers Content-Type=application/json --body "@$2" -o none
+}
+
+step "Entra app registration '$ENTRA_APP_NAME' (the server's API)"
+APP_ID="$(app_id_named "$ENTRA_APP_NAME")"
 if [[ -z "$APP_ID" ]]; then
-  APP_ID="$(az ad app create --display-name "$ENTRA_APP_NAME" --sign-in-audience AzureADMyOrg \
-    --web-redirect-uris "$CLAUDE_CALLBACK" --query appId -o tsv)"
-  NEW_APP=true
+  APP_ID="$(az ad app create --display-name "$ENTRA_APP_NAME" --sign-in-audience AzureADMyOrg --query appId -o tsv)"
 fi
 APP_OBJECT_ID="$(az ad app show --id "$APP_ID" --query id -o tsv)"
-az ad sp show --id "$APP_ID" -o none 2>/dev/null || az ad sp create --id "$APP_ID" -o none
+ensure_sp "$APP_ID"
 
 # v2 tokens and the mcp.access scope first: Entra only accepts the azurewebsites.net URL as an
-# Application ID URI on apps that use v2 tokens.
+# Application ID URI on apps that use v2 tokens. No redirect URI: nobody signs in with this app
+# (setups from before the split had Claude's callback here).
 SCOPE_ID="$(az ad app show --id "$APP_ID" --query "api.oauth2PermissionScopes[?value=='$SCOPE_NAME'].id | [0]" -o tsv)"
 [[ -n "$SCOPE_ID" ]] || SCOPE_ID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
-SCOPE_ID="$SCOPE_ID" SCOPE_NAME="$SCOPE_NAME" CLAUDE_CALLBACK="$CLAUDE_CALLBACK" python3 - "$TMP/api.json" <<'PY'
+SCOPE_ID="$SCOPE_ID" SCOPE_NAME="$SCOPE_NAME" python3 - "$TMP/api.json" <<'PY'
 import json, os, sys
 description = "Read your SEV electricity meters, usage, cost and CO2 through SEV MCP."
 json.dump({
@@ -133,23 +144,55 @@ json.dump({
             "userConsentDescription": description,
         }],
     },
-    "web": {"redirectUris": [os.environ["CLAUDE_CALLBACK"]]},
+    "web": {"redirectUris": []},
 }, open(sys.argv[1], "w"))
 PY
-az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
-  --headers Content-Type=application/json --body "@$TMP/api.json" -o none
+patch_app "$APP_OBJECT_ID" "$TMP/api.json"
 
-# Claude sends the MCP URL as the token's "resource", so Entra must know it as one of the app's URIs.
+# Claude sends the MCP URL as the token's "resource", so Entra must know it as one of the API's URIs.
 printf '{"identifierUris": ["api://%s", "%s"]}' "$APP_ID" "$RESOURCE" > "$TMP/uris.json"
-az rest --method PATCH --uri "https://graph.microsoft.com/v1.0/applications/$APP_OBJECT_ID" \
-  --headers Content-Type=application/json --body "@$TMP/uris.json" -o none \
+patch_app "$APP_OBJECT_ID" "$TMP/uris.json" \
   || fail "Entra refused '$RESOURCE' as an Application ID URI. See Troubleshooting in docs/deploy-azure.md."
 
+step "Entra app registration '$CLIENT_APP_NAME' (Claude's login)"
+CLIENT_ID="$(app_id_named "$CLIENT_APP_NAME")"
+NEW_CLIENT=false
+if [[ -z "$CLIENT_ID" ]]; then
+  CLIENT_ID="$(az ad app create --display-name "$CLIENT_APP_NAME" --sign-in-audience AzureADMyOrg \
+    --web-redirect-uris "$CLAUDE_CALLBACK" --query appId -o tsv)"
+  NEW_CLIENT=true
+fi
+CLIENT_OBJECT_ID="$(az ad app show --id "$CLIENT_ID" --query id -o tsv)"
+ensure_sp "$CLIENT_ID"
+# Claude's callback, and the API's mcp.access scope as the permission it asks for.
+APP_ID="$APP_ID" SCOPE_ID="$SCOPE_ID" CLAUDE_CALLBACK="$CLAUDE_CALLBACK" python3 - "$TMP/client.json" <<'PY'
+import json, os, sys
+json.dump({
+    "web": {"redirectUris": [os.environ["CLAUDE_CALLBACK"]]},
+    "requiredResourceAccess": [{
+        "resourceAppId": os.environ["APP_ID"],
+        "resourceAccess": [{"id": os.environ["SCOPE_ID"], "type": "Scope"}],
+    }],
+}, open(sys.argv[1], "w"))
+PY
+patch_app "$CLIENT_OBJECT_ID" "$TMP/client.json"
+
+# The API trusts Claude's login for mcp.access, so signing in doesn't ask for consent to it.
+CLIENT_ID="$CLIENT_ID" SCOPE_ID="$SCOPE_ID" python3 - "$TMP/preauth.json" <<'PY'
+import json, os, sys
+json.dump({"api": {"preAuthorizedApplications": [
+    {"appId": os.environ["CLIENT_ID"], "delegatedPermissionIds": [os.environ["SCOPE_ID"]]},
+]}}, open(sys.argv[1], "w"))
+PY
+patch_app "$APP_OBJECT_ID" "$TMP/preauth.json"
+
 CLIENT_SECRET=""
-if [[ "$NEW_APP" == true ]]; then
-  CLIENT_SECRET="$(az ad app credential reset --id "$APP_ID" --display-name "Claude connector" \
+if [[ "$NEW_CLIENT" == true ]]; then
+  CLIENT_SECRET="$(az ad app credential reset --id "$CLIENT_ID" --display-name "Claude connector" \
     --years 2 --append --query password -o tsv)"
 fi
+# Setups from before the split gave Claude a secret on the API's registration; it's no longer used.
+OLD_SECRETS="$(az ad app show --id "$APP_ID" --query 'length(passwordCredentials)' -o tsv)"
 
 # --- App settings ---------------------------------------------------------------------------
 
@@ -246,7 +289,7 @@ Done. Next steps (details in docs/deploy-azure.md):
 2. In Claude: Settings > Connectors > Add custom connector
      URL:            $RESOURCE
      OAuth client:   use your own
-     Client ID:      $APP_ID
+     Client ID:      $CLIENT_ID
 EOF
 if [[ -n "$CLIENT_SECRET" ]]; then
   cat <<EOF
@@ -258,9 +301,18 @@ EOF
 else
   echo "     Client secret:  the one from the first run (to make a new one, see the guide)"
 fi
+if [[ "${OLD_SECRETS:-0}" != 0 ]]; then
+  cat <<EOF
+
+   '$ENTRA_APP_NAME' still has a client secret from before Claude got its own app registration.
+   Once Claude works with the client ID above, delete it (Entra portal > App registrations >
+   $ENTRA_APP_NAME > Certificates & secrets).
+EOF
+fi
 cat <<EOF
 
 To delete everything later:
   az group delete --name $RESOURCE_GROUP
   az ad app delete --id $APP_ID
+  az ad app delete --id $CLIENT_ID
 EOF
