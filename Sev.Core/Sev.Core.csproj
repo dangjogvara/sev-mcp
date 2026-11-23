@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What both the MCP tools and the web pages need: periods, summaries, nicknames, the heat pump log.
+       No MCP or ASP.NET here, so either front end can use it. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyUplink.Client\MyUplink.Client.csproj" />
+    <ProjectReference Include="..\Sev.Client\Sev.Client.csproj" />
+  </ItemGroup>
+
+</Project>

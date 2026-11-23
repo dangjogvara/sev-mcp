@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using MyUplink.Client;
 using MyUplink.Client.Models;
+using Sev.Core.HeatPump;
 using Sev.McpServer.HeatPump;
 using Sev.McpServer.Tools;
 

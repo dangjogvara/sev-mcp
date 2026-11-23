@@ -7,6 +7,8 @@
   <ItemGroup>
     <ProjectReference Include="..\MyUplink.Client\MyUplink.Client.csproj" />
     <ProjectReference Include="..\Sev.Client\Sev.Client.csproj" />
+    <ProjectReference Include="..\Sev.Core\Sev.Core.csproj" />
+    <ProjectReference Include="..\Sev.Web\Sev.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

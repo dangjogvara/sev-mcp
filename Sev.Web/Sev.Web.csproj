@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The web pages (Blazor components and their stylesheet). Sev.McpServer hosts them, in the same app as the
+       MCP tools, so they share the SEV rate limit, logins, cache and heat pump log. -->
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Sev.Core\Sev.Core.csproj" />
+  </ItemGroup>
+
+</Project>

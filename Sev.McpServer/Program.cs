@@ -4,7 +4,7 @@ using ModelContextProtocol;
 using Sev.Client;
 using Sev.McpServer;
 using Sev.McpServer.Tools;
-using Sev.McpServer.Web;
+using Sev.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,12 +37,17 @@ if (heatPump)
     mcp.WithTools<HeatPumpTools>(toolJsonOptions).WithTools<HeatPumpHistoryTools>(toolJsonOptions);
 }
 
-// Web pages (Blazor), local only until they have a login. See WebSetup.
-builder.AddSevWeb();
+// Web pages (Blazor), from Sev.Web.
+builder.Services.AddSevWeb();
 
 var app = builder.Build();
 app.MapMcpEndpoint(auth);
-app.MapSevWeb(auth);
+// The pages have no login of their own yet, so they're only mapped without Auth: locally, where AllowedHosts and
+// LocalOrigin already keep everything to this machine. On a hosted server they don't exist.
+if (!auth.Enabled)
+{
+    app.MapSevWeb();
+}
 
 // For App Service's Always On (which pings "/") and Health check ("/health"): they answer 200 without a login,
 // and without calling SEV or myUplink, so they never use up a rate limit.

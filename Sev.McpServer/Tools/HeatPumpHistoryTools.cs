@@ -2,7 +2,8 @@ using System.ComponentModel;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Sev.Client;
-using Sev.McpServer.HeatPump;
+using Sev.Core;
+using Sev.Core.HeatPump;
 
 namespace Sev.McpServer.Tools;
 
@@ -29,8 +30,7 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         [Description("Reading names or parts of names, e.g. 'Outdoor Temperature', 'Primary flow temp', or 'all'. Default: outdoor temperature.")]
         string[]? parameters = null)
     {
-        var bucket = Periods.ParseGranularity(granularity);
-        var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
+        var (bucket, fromTime, toTime) = ToolInput.ParsePeriod(from, to, granularity);
         return Summarize(log.Snapshot(), fromTime, toTime, SevTime.LocalNow(time), bucket, parameters);
     }
 

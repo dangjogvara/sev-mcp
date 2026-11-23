@@ -34,6 +34,15 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 
 ## Architecture
 
+### Projects
+
+References only go one way: `Sev.McpServer` → `Sev.Web` → `Sev.Core` → `Sev.Client` / `MyUplink.Client`. The compiler enforces it, so the pages can't use tool code and the core knows nothing about MCP or ASP.NET.
+
+- `Sev.Client`, `MyUplink.Client`: the two APIs.
+- `Sev.Core`: what both front ends (the MCP tools and the web pages) need: `Periods`, `FaroeseTime`, `HourlySummary`, `CostPrices`, `MeterSummary`, `MeterNicknames`, and `HeatPump/` (`HeatPumpLog`, `HeatPumpReadings`). Bad input throws `InvalidInputException`, whose message says what to fix.
+- `Sev.Web`: the Blazor pages (a Razor class library).
+- `Sev.McpServer`: the host (`Program.cs`, login, options, DI, the heat pump logger) and the MCP tools. It's the only app: everything runs in one process, see below.
+
 ### Sev.Client
 
 - `SevClient` wraps a caller-supplied `HttpClient` whose `BaseAddress` must be `SevClient.DefaultBaseAddress`; the constructor rejects a missing base address or one without the trailing `/`.
@@ -63,16 +72,16 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 - The MCP server uses the Streamable HTTP transport (`ModelContextProtocol.AspNetCore`) at `/mcp`. HTTP rather than stdio, so it can be hosted and used as a custom connector from the Claude apps.
 - `Program.cs` is a short overview. `SevServices.AddSevClient` registers `SevRateLimiter` and `SevTokenProvider` as singletons, `SevClient` as a typed `HttpClient` with `SevAuthHandler` then `SevRateLimitHandler`, `SevCache` (singleton) and `SevDataService` (transient).
 - Tools live in `Tools/` and are registered with `WithTools<T>(toolJsonOptions)` (relaxed escaping keeps æ/ø/á readable). Tools take `SevDataService`, never `SevClient` directly.
-- Only an `McpException`'s message reaches Claude (other exceptions become a generic error), so tools wrap calls in `SevToolErrors.CallAsync` / `HeatPumpToolErrors.CallAsync` and throw `McpException` for invalid arguments.
-- Keep tool logic in static methods so `Sev.McpServer.Tests` can test it without HTTP.
+- Only an `McpException`'s message reaches Claude (other exceptions become a generic error), so tools wrap calls in `SevToolErrors.CallAsync` / `HeatPumpToolErrors.CallAsync` and throw `McpException` for invalid arguments. `ToolInput.ParsePeriod` reads from / to / granularity with `Periods` and passes `Sev.Core`'s `InvalidInputException` on as an `McpException`.
+- Keep tool logic in static methods so `Sev.McpServer.Tests` can test it without HTTP, and logic a page could also use in `Sev.Core`.
 - `GET /health` and `GET /` answer 200 without a login and without calling SEV or myUplink, for App Service's Health check and Always On (`Program.cs`).
 - The server must run as **one instance**: the rate-limit count, tokens, MCP sessions and the cache live in memory, and the cache and heat pump log files in the shared `/home` would be written by every instance. `docs/deploy-azure.md` explains this.
-- `Periods` holds what all period-based tools share: `Granularity`, the argument checks (`ParseRange`, `ParseGranularity`, `MaxRange`), `Key` (the period a time falls in) and `ExpectedHours` (the ended local hours in a range, skipping the hour summer time skips).
+- `Periods` (`Sev.Core`) holds what all period-based tools share: `Granularity`, the argument checks (`ParseRange`, `ParseGranularity`, `MaxRange`), `Key` (the period a time falls in) and `ExpectedHours` (the ended local hours in a range, skipping the hour summer time skips).
 
 ### Usage, cost and CO2 tools
 
 - `get_usage` (kWh), `get_cost` (SEV's estimated cost, unit `DKR`) and `get_co2` (estimated emissions, unit `Kg CO2`) share one implementation, `UsageTools.GetHourlySeriesAsync`.
-- `HourlySummary.Summarize` aggregates the hourly data into hours, days or months in C#, for any `IMeterReadings`, and returns `MeterSeriesResult`s.
+- `HourlySummary.Summarize` (`Sev.Core`) aggregates the hourly data into hours, days or months in C#, for any `IMeterReadings`, and returns `MeterSeriesResult`s.
 - Results must never present missing data as zero: `total` is `null` without readings, and `expectedHours` / `missingHours` / `note` show gaps, per meter and per period. Expected hours are limited to each meter's installation (`ExpectedHoursFor`): on the install and removal days the meter starts at its first reading and ends after its last one.
 - `GetHourlySeriesAsync` reads "now" (injected `TimeProvider`) before fetching, so a call that crosses the top of an hour never expects an hour `SevDataService` didn't fetch.
 - `get_cost` also gives each meter `prices` (`CostPrices`, added through `GetHourlySeriesAsync`'s `addDetails`): stretches of the period with one `price_unit` and tariff. SEV's price is fixed per meter (the same every hour of the day), differs between meters, and changes rarely, so this is usually one stretch.
@@ -103,27 +112,28 @@ Optional: registered only when `MyUplinkServices.AddMyUplinkIfConfigured` finds 
   - Every request sends `User-Agent: sev-mcp/1.0`: Cloudflare in front of myUplink refuses some default client signatures (error 1010).
   - 25 calls per minute (headers `ratelimit-limit` / `-remaining` / `-reset`). Parameter IDs arrive as strings though the spec says integers (`StringOrNumberConverter`).
   - The sign-in endpoints in its OpenID configuration (`/connect/authorize`, `/connect/deviceauthorization`) answer 404; the working ones are `/oauth/authorize` and `/oauth/token`.
-- **Values:** `strVal` is the app's display text (the label for coded values), `-32768` means a sensor isn't connected, and some CTC parameters and categories have no English name ("Text not found: ..."). `HeatPump/HeatPumpReadings` holds the rules: `ForStatus` (named and connected) and `ForLog` (also no settings, coded values or software versions).
+- **Values:** `strVal` is the app's display text (the label for coded values), `-32768` means a sensor isn't connected, and some CTC parameters and categories have no English name ("Text not found: ..."). `Sev.Core/HeatPump/HeatPumpReadings` holds the rules: `ForStatus` (named and connected) and `ForLog` (also no settings, coded values or software versions).
 - **`get_heatpump_status`** (`Tools/HeatPumpTools.cs`) groups current values by category, gives coded values as their label, marks settings, and fetches alarms only when the system has one.
 - **History:** myUplink's history endpoints answered 403 with client credentials and with a user login (issue #96), so the server keeps its own.
-  - `HeatPump/HeatPumpLogger` (a `BackgroundService`, on unless `MyUplink:LogHourly` is false) checks every 5 minutes and, when the current local hour has no sample, logs every device's `ForLog` readings in `HeatPump/HeatPumpLog` (singleton, one sample per local hour, the repeated summer-time hour once).
+  - `Sev.McpServer/HeatPump/HeatPumpLogger` (a `BackgroundService`, on unless `MyUplink:LogHourly` is false) checks every 5 minutes and, when the current local hour has no sample, logs every device's `ForLog` readings in `Sev.Core/HeatPump/HeatPumpLog` (singleton, one sample per local hour, the repeated summer-time hour once).
   - With `Sev:CacheDirectory` the log is saved as one JSON file per month there (`HeatPumpLog-2026-11.json`, temp file + rename, unreadable files ignored); without, memory only. It can't be fetched again if lost, hence the backups.
   - `get_heatpump_history` (`Tools/HeatPumpHistoryTools.cs`) takes the same `from` / `to` / `granularity` as `get_usage`, defaults to readings with "outdoor" in the name (or `all`, or names / parts of names), gives `value` per hour and `average` / `min` / `max` per day or month, and counts hours since logging started without a sample as `missingHours`, never as zero.
   - Tests that start the server with myUplink configured must set `MyUplink:LogHourly=false`, or the logger calls myUplink.
 
 ### Web pages (Blazor)
 
-A small frontend, a learning project in progress (issue #117 has the skeleton).
+A small frontend, a learning project in progress.
 
-- Lives in `Sev.McpServer/Web/` (`WebSetup.AddSevWeb` / `MapSevWeb`, `Components/` with `App`, `Routes`, `Layout/`, `Pages/`) plus `Sev.McpServer/wwwroot/`. Same app as the tools on purpose: the rate-limit count, logins, cache and heat pump log are in-memory singletons, so a separate app would have its own count and could go over SEV's limit with the server.
+- Lives in `Sev.Web` (`WebSetup.AddSevWeb` / `MapSevWeb`, `Components/` with `App`, `Routes`, `Layout/`, `Pages/`, and `wwwroot/`, served at `/_content/Sev.Web/`). `Sev.McpServer` hosts it in the same app as the tools on purpose: the rate-limit count, logins, cache and heat pump log are in-memory singletons, so a separate app would have its own count and could go over SEV's limit with the server.
 - Static server-side rendering (`AddRazorComponents` without interactivity): plain HTML, no JavaScript or WebAssembly.
-- **Local only:** `MapSevWeb` maps nothing when `Auth` is set, since the pages have no browser login yet (`WebTests` checks both modes). Locally `AllowedHosts` and `LocalOrigin` already limit them to this machine.
-- Pages load data through `SevDataService` (never `SevClient`), and keep calculations in plain C# classes that can be tested without a browser; the `.razor` files only show the data.
+- **Local only:** `Program.cs` calls `MapSevWeb` only when `Auth` isn't set, since the pages have no browser login yet (`WebTests` checks both modes). Locally `AllowedHosts` and `LocalOrigin` already limit them to this machine.
+- Pages load data through `SevDataService` (never `SevClient`) and the logic in `Sev.Core`. Calculations go in plain C# classes that can be tested without a browser; the `.razor` files only show the data.
 
 ### Tests and smoke test
 
 - `Sev.Client.Tests`, `MyUplink.Client.Tests`: `FakeHttpMessageHandler` returns canned responses and records requests, so tests never call the real APIs. `Fixtures/*.json` are sanitized copies of real responses; keep their structure and field names exact when editing.
-- `Sev.McpServer.Tests`: the tools' pure logic (mapping, argument checks, error messages), plus `LoginTests` and the tool registration tests, which start the server with `WebApplicationFactory<Program>` (test-signed tokens for the login).
+- `Sev.Core.Tests`: the shared logic (periods, summaries, prices, meters and nicknames, the heat pump log).
+- `Sev.McpServer.Tests`: the tools (meter selection, error messages, the history tool, the logger), `WebTests`, plus `LoginTests` and the tool registration tests, which start the server with `WebApplicationFactory<Program>` (test-signed tokens for the login).
 - `Sev.SmokeTest`: console app used as a manual smoke test: logs in, lists meters, prints hourly usage for all of the account's meters on a hardcoded date.
 
 ### JSON conventions

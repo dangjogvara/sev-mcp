@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sev.Client;
-using Sev.McpServer.Tools;
+using Sev.Core;
 
 namespace Sev.McpServer;
 

@@ -5,7 +5,7 @@ using ModelContextProtocol.Server;
 using MyUplink.Client;
 using MyUplink.Client.Models;
 using Sev.Client;
-using Sev.McpServer.HeatPump;
+using Sev.Core.HeatPump;
 
 namespace Sev.McpServer.Tools;
 

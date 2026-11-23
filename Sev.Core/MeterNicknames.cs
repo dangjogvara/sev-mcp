@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Sev.McpServer.Tools;
+namespace Sev.Core;
 
 // Nicknames for meters from the server's settings (Sev:MeterNicknames:<meter ID>, hosted
 // Sev__MeterNicknames__<meter ID>), for when SEV's own portal can't set one: SEV's API only reads

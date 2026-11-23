@@ -1,6 +1,6 @@
-using Sev.McpServer.Tools;
+using Sev.Core;
 
-namespace Sev.McpServer.Tests;
+namespace Sev.Core.Tests;
 
 public class FaroeseTimeTests
 {

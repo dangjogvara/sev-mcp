@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Sev.Client;
+using Sev.Core;
 using Sev.McpServer.Tools;
 
 namespace Sev.McpServer.Tests;

@@ -2,7 +2,7 @@ using System.Globalization;
 using Sev.Client;
 using Sev.Client.Models;
 
-namespace Sev.McpServer.Tools;
+namespace Sev.Core;
 
 // The price per kWh behind get_cost. SEV's price is fixed per meter (the same every hour of the day) and only
 // changes now and then, so instead of a price per hour, each meter gets the stretches of the period with one

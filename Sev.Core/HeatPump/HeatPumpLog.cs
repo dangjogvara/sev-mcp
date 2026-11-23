@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 
-namespace Sev.McpServer.HeatPump;
+namespace Sev.Core.HeatPump;
 
 // The heat pump's readings, one sample per hour, logged by HeatPumpLogger because myUplink doesn't give its
 // history to apps (issue #96). Hours are local Faroese time (start of the hour), like SEV's readings, so the

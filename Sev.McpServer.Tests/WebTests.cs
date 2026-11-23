@@ -23,14 +23,14 @@ public class WebTests
     {
         using var factory = Server(withAuth: false);
 
-        var response = await factory.CreateClient().GetAsync("/app.css");
+        var response = await factory.CreateClient().GetAsync("/_content/Sev.Web/app.css");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Theory]
     [InlineData("/usage")]
-    [InlineData("/app.css")]
+    [InlineData("/_content/Sev.Web/app.css")]
     public async Task Pages_Hosted_DoNotExist(string path)
     {
         using var factory = Server(withAuth: true);
