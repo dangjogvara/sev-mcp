@@ -49,7 +49,7 @@ To use it from the Claude apps on the web and your phone, host your own copy. A 
 
 1. **Fork** this repository and turn on Actions in your fork.
 2. **Clone your fork** and put `SEV_USER` and `SEV_KEY` in a `.env` file (gitignored), plus `MYUPLINK_CLIENT_ID` and `MYUPLINK_CLIENT_SECRET` for the heat pump.
-3. **Run** `./deploy/setup-azure.sh` after `az login` and `gh auth login`. It creates the web app, a login that only lets you in, deployment from your fork, and daily backups, and prints the URL, client ID and client secret for Claude.
+3. **Run** `./deploy/setup-azure.sh` after `az login` and `gh auth login`. It creates the web app, a login that only lets you in (two Entra app registrations), deployment from your fork, and daily backups, and prints the URL, client ID and client secret for Claude.
 4. **Deploy** with `gh workflow run ci.yml --ref main`.
 5. **Connect Claude:** Settings > Connectors > Add custom connector.
 
