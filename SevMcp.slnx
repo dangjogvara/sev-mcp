@@ -3,7 +3,10 @@
   <Project Path="MyUplink.Client/MyUplink.Client.csproj" />
   <Project Path="Sev.Client.Tests/Sev.Client.Tests.csproj" />
   <Project Path="Sev.Client/Sev.Client.csproj" />
+  <Project Path="Sev.Core.Tests/Sev.Core.Tests.csproj" />
+  <Project Path="Sev.Core/Sev.Core.csproj" />
   <Project Path="Sev.McpServer.Tests/Sev.McpServer.Tests.csproj" />
   <Project Path="Sev.McpServer/Sev.McpServer.csproj" />
   <Project Path="Sev.SmokeTest/Sev.SmokeTest.csproj" />
+  <Project Path="Sev.Web/Sev.Web.csproj" />
 </Solution>

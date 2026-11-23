@@ -74,7 +74,9 @@ A small web frontend (Blazor) is in progress at http://localhost:5133/usage whil
 |---|---|
 | `Sev.Client` | SEV's API: client, login, rate limiting and cache. |
 | `MyUplink.Client` | myUplink's API (heat pumps): login, current values and alarms. |
-| `Sev.McpServer` | The MCP server (ASP.NET Core, Streamable HTTP) and its tools. |
+| `Sev.Core` | Logic shared by the tools and the web pages: periods, summaries, prices, nicknames, the heat pump log. |
+| `Sev.Web` | The web pages (Blazor), hosted by `Sev.McpServer`. |
+| `Sev.McpServer` | The app: the MCP server (ASP.NET Core, Streamable HTTP), its tools and the login. |
 | `*.Tests` | xUnit tests for each of the above. |
 | `Sev.SmokeTest` | A console app that prints meters and one day of usage from the live API. |
 

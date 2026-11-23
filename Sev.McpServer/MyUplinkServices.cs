@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using MyUplink.Client;
+using Sev.Core.HeatPump;
 using Sev.McpServer.HeatPump;
 
 namespace Sev.McpServer;

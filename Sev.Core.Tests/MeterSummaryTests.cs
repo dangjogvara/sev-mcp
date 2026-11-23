@@ -1,12 +1,12 @@
 using Sev.Client.Models;
-using Sev.McpServer.Tools;
+using Sev.Core;
 
-namespace Sev.McpServer.Tests;
+namespace Sev.Core.Tests;
 
-public class MeterToolsTests
+public class MeterSummaryTests
 {
     [Fact]
-    public void Summarize_FlattensCustomersInstallationsAndMeters()
+    public void FromCustomers_FlattensCustomersInstallationsAndMeters()
     {
         var customers = new List<Customer>
         {
@@ -20,7 +20,7 @@ public class MeterToolsTests
             ]),
         };
 
-        var meters = MeterTools.Summarize(customers);
+        var meters = MeterSummary.FromCustomers(customers);
 
         Assert.Equal([1111, 2222, 3333], meters.Select(m => m.MeterId));
 
@@ -34,14 +34,14 @@ public class MeterToolsTests
     }
 
     [Fact]
-    public void Summarize_CopiesMeterFields()
+    public void FromCustomers_CopiesMeterFields()
     {
         var customers = new List<Customer>
         {
             new("Test Customer", [Installation("Testgøta 1", floor: null, Meter(1111, removalDate: null))]),
         };
 
-        var meter = Assert.Single(MeterTools.Summarize(customers));
+        var meter = Assert.Single(MeterSummary.FromCustomers(customers));
 
         Assert.Equal("E350", meter.MeterName);
         Assert.Equal("E-01", meter.MeterType);
@@ -50,7 +50,7 @@ public class MeterToolsTests
     }
 
     [Fact]
-    public void Summarize_MissingAddressParts_AreLeftOut()
+    public void FromCustomers_MissingAddressParts_AreLeftOut()
     {
         Installation Bare(string? address, string? postalCode, string? district) =>
             new(new DateTime(2019, 6, 1), null, 10001, null, address, null, postalCode, district, 310, "OS", [Meter(1111, null)]);
@@ -59,15 +59,15 @@ public class MeterToolsTests
             new("Test Customer", [Bare(null, "100", "Tórshavn"), Bare("Testgøta 1", null, null), Bare(null, null, null)]),
         };
 
-        var meters = MeterTools.Summarize(customers);
+        var meters = MeterSummary.FromCustomers(customers);
 
         Assert.Equal(["100 Tórshavn", "Testgøta 1", ""], meters.Select(m => m.Address));
     }
 
     [Fact]
-    public void Summarize_NoCustomers_ReturnsEmpty()
+    public void FromCustomers_NoCustomers_ReturnsEmpty()
     {
-        Assert.Empty(MeterTools.Summarize([]));
+        Assert.Empty(MeterSummary.FromCustomers([]));
     }
 
     private static Installation Installation(string address, string? floor, params Meter[] meters) =>

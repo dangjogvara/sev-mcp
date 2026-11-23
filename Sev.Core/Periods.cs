@@ -1,7 +1,6 @@
-using ModelContextProtocol;
 using Sev.Client;
 
-namespace Sev.McpServer.Tools;
+namespace Sev.Core;
 
 public enum Granularity
 {
@@ -33,28 +32,28 @@ public static class Periods
                 return value;
             }
         }
-        throw new McpException($"Unknown granularity '{granularity}'. Use 'hour', 'day' or 'month'.");
+        throw new InvalidInputException($"Unknown granularity '{granularity}'. Use 'hour', 'day' or 'month'.");
     }
 
-    // Validates the dates; McpException messages are shown to Claude so it can correct the call.
+    // Validates the dates; InvalidInputException messages say what to fix, for Claude or a person.
     public static (DateTime From, DateTime To) ParseRange(string from, string to, Granularity granularity)
     {
         if (!FaroeseTime.TryParse(from, out var fromTime))
         {
-            throw new McpException($"Could not read 'from' ({from}). Use a date like 2026-10-10 or a date-time like 2026-10-10T06:00.");
+            throw new InvalidInputException($"Could not read 'from' ({from}). Use a date like 2026-10-10 or a date-time like 2026-10-10T06:00.");
         }
         if (!FaroeseTime.TryParse(to, out var toTime))
         {
-            throw new McpException($"Could not read 'to' ({to}). Use a date like 2026-10-11 or a date-time like 2026-10-11T06:00.");
+            throw new InvalidInputException($"Could not read 'to' ({to}). Use a date like 2026-10-11 or a date-time like 2026-10-11T06:00.");
         }
         if (fromTime >= toTime)
         {
-            throw new McpException($"'from' ({fromTime:yyyy-MM-dd HH:mm}) must be before 'to' ({toTime:yyyy-MM-dd HH:mm}); 'to' is not included.");
+            throw new InvalidInputException($"'from' ({fromTime:yyyy-MM-dd HH:mm}) must be before 'to' ({toTime:yyyy-MM-dd HH:mm}); 'to' is not included.");
         }
         var maxRange = MaxRange(granularity);
         if (toTime - fromTime > maxRange)
         {
-            throw new McpException(
+            throw new InvalidInputException(
                 $"Granularity '{granularity.ToString().ToLowerInvariant()}' is limited to {maxRange.TotalDays} days per call. " +
                 "Use a shorter period or a coarser granularity ('day' or 'month').");
         }

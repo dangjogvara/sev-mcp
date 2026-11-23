@@ -3,6 +3,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Sev.Client;
 using Sev.Client.Models;
+using Sev.Core;
 
 namespace Sev.McpServer.Tools;
 
@@ -101,14 +102,13 @@ public class UsageTools(SevDataService sev, TimeProvider time, MeterNicknames ni
         CancellationToken cancellationToken,
         Func<MeterSeriesResult, IHourlyResult, MeterSeriesResult>? addDetails = null)
     {
-        var bucket = Periods.ParseGranularity(granularity);
-        var (fromTime, toTime) = Periods.ParseRange(from, to, bucket);
+        var (bucket, fromTime, toTime) = ToolInput.ParsePeriod(from, to, granularity);
         return SevToolErrors.CallAsync(async () =>
         {
             // "Now" is taken before fetching: SevDataService fetches up to its own (later or equal) now, so every
             // hour the summary expects has been asked for, even if the call crosses the top of an hour.
             var localNow = SevTime.LocalNow(time);
-            var available = SevToolErrors.ThrowIfEmpty(nicknames.Apply(MeterTools.Summarize(await sev.GetAvailableMetersAsync(cancellationToken))));
+            var available = SevToolErrors.ThrowIfEmpty(nicknames.Apply(MeterSummary.FromCustomers(await sev.GetAvailableMetersAsync(cancellationToken))));
             var selected = ResolveMeters(available, meters);
 
             var result = SevToolErrors.ThrowIfEmptyAnswer(await fetch(selected.Select(m => m.MeterId).ToList(), fromTime, toTime));

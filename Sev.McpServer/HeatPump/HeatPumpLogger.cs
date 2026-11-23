@@ -1,5 +1,6 @@
 using MyUplink.Client;
 using Sev.Client;
+using Sev.Core.HeatPump;
 
 namespace Sev.McpServer.HeatPump;
 

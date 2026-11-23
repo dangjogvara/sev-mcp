@@ -1,7 +1,7 @@
 using System.Globalization;
 using Sev.Client.Models;
 
-namespace Sev.McpServer.Tools;
+namespace Sev.Core;
 
 // Turns hourly readings (usage, cost or CO2) into the totals and periods the tools return, and works out
 // which hours should have a reading, so missing data is reported as missing and never as zero.

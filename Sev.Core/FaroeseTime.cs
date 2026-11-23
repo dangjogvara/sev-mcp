@@ -1,7 +1,7 @@
 using System.Globalization;
 using Sev.Client;
 
-namespace Sev.McpServer.Tools;
+namespace Sev.Core;
 
 // SEV works in local Faroese time and SevClient only accepts DateTime with Kind = Unspecified.
 // Claude may send plain dates, local times, or ISO strings with "Z" or an offset; this turns all of

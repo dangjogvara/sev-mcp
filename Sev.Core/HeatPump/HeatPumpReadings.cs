@@ -1,6 +1,6 @@
 using MyUplink.Client.Models;
 
-namespace Sev.McpServer.HeatPump;
+namespace Sev.Core.HeatPump;
 
 // Which of myUplink's values are worth showing or logging, in one place.
 // - get_heatpump_status shows every named, connected value (ForStatus), settings and status codes included.

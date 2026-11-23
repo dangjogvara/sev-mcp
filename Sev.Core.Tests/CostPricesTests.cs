@@ -1,8 +1,8 @@
 using Sev.Client;
 using Sev.Client.Models;
-using Sev.McpServer.Tools;
+using Sev.Core;
 
-namespace Sev.McpServer.Tests;
+namespace Sev.Core.Tests;
 
 public class CostPricesTests
 {
