@@ -20,18 +20,27 @@ public class MeterNicknames
             pair => int.Parse(pair.Key, NumberStyles.None, CultureInfo.InvariantCulture),
             pair => pair.Value.Trim()));
 
-    // What's wrong with the configured nicknames, in words; empty when they can be used.
-    public static IReadOnlyList<string> Problems(IReadOnlyDictionary<string, string>? configured) =>
-        (configured ?? new Dictionary<string, string>())
+    // What's wrong with the configured nicknames, in words; empty when they can be used. Two keys for the same
+    // meter ("0123" and "123") are a problem too, since it would be unclear which nickname applies.
+    public static IReadOnlyList<string> Problems(IReadOnlyDictionary<string, string>? configured)
+    {
+        var pairs = configured ?? new Dictionary<string, string>();
+        var perPair = pairs
             .SelectMany(pair => new[]
             {
                 int.TryParse(pair.Key, NumberStyles.None, CultureInfo.InvariantCulture, out _)
                     ? null
                     : $"Sev:MeterNicknames:{pair.Key} isn't a meter ID (a number, as list_meters shows it).",
                 string.IsNullOrWhiteSpace(pair.Value) ? $"Sev:MeterNicknames:{pair.Key} is empty." : null,
-            })
-            .OfType<string>()
-            .ToList();
+            });
+        var sameMeter = pairs.Keys
+            .Select(key => (Key: key, Parsed: int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var id), Id: id))
+            .Where(k => k.Parsed)
+            .GroupBy(k => k.Id)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"Sev:MeterNicknames has more than one key for meter {g.Key}: {string.Join(", ", g.Select(k => k.Key).Order(StringComparer.Ordinal))}.");
+        return perPair.OfType<string>().Concat(sameMeter).ToList();
+    }
 
     public IReadOnlyList<MeterSummary> Apply(IReadOnlyList<MeterSummary> meters) =>
         _byMeterId.Count == 0

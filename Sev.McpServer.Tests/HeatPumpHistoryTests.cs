@@ -48,7 +48,25 @@ public class HeatPumpHistoryTests
         Assert.Equal(0, sample.Logged);
         Assert.Equal(["CTC"], sample.Offline);
         Assert.Empty(log.Snapshot());
-        Assert.False(log.HasSample(Hour));
+        Assert.False(log.HasSample("DEV1", Hour));
+    }
+
+    [Fact]
+    public async Task TakeSample_LogsOnlyDevicesWithoutTheHour()
+    {
+        // DEV1 was logged at an earlier check; DEV2 failed then and is logged now, with one points call.
+        var log = new HeatPumpLog();
+        log.Add("DEV1", "CTC", Hour, [Reading("62000", "Outdoor Temperature", 4)]);
+        var client = ClientAnswering(
+            """{"systems":[{"systemId":"SYS1","name":"Home","hasAlarm":false,"devices":[{"id":"DEV1","connectionState":"Connected","product":{"name":"CTC"}},{"id":"DEV2","connectionState":"Connected","product":{"name":"CTC 2"}}]}]}""",
+            """[{"category":"General","parameterId":"62000","parameterName":"Outdoor Temperature","parameterUnit":"°C","writable":false,"value":5.5}]""");
+
+        var sample = await HeatPumpLogger.TakeSampleAsync(client, log, Hour, CancellationToken.None);
+
+        Assert.Equal(1, sample.Logged);
+        Assert.Equal(["DEV1", "DEV2"], sample.Devices);
+        Assert.True(log.HasSample("DEV2", Hour));
+        Assert.Equal(4, log.Snapshot().Single(d => d.DeviceId == "DEV1").Samples.Single().Values["62000"]);
     }
 
     // --- get_heatpump_history ---

@@ -3,21 +3,24 @@ using System.Net;
 namespace MyUplink.Client;
 
 // A non-success answer from myUplink. RetryAfter comes from Retry-After or myUplink's ratelimit-reset header.
-public class MyUplinkApiException(HttpStatusCode statusCode, string responseBody, TimeSpan? retryAfter)
+// AtLogin is true when the login (/oauth/token) failed, where a 400 means the client ID or secret is wrong.
+public class MyUplinkApiException(HttpStatusCode statusCode, string responseBody, TimeSpan? retryAfter, bool atLogin = false)
     : HttpRequestException($"myUplink answered {(int)statusCode} {statusCode}: {Shorten(responseBody)}", null, statusCode)
 {
     public string ResponseBody { get; } = responseBody;
 
     public TimeSpan? RetryAfter { get; } = retryAfter;
 
-    internal static async Task ThrowIfFailedAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    public bool AtLogin { get; } = atLogin;
+
+    internal static async Task ThrowIfFailedAsync(HttpResponseMessage response, CancellationToken cancellationToken, bool atLogin = false)
     {
         if (response.IsSuccessStatusCode)
         {
             return;
         }
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
-        throw new MyUplinkApiException(response.StatusCode, body, RetryAfterOf(response));
+        throw new MyUplinkApiException(response.StatusCode, body, RetryAfterOf(response), atLogin);
     }
 
     private static TimeSpan? RetryAfterOf(HttpResponseMessage response)

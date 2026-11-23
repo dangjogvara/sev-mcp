@@ -65,14 +65,14 @@ public class MyUplinkClient
         }
     }
 
-    private Task<HttpResponseMessage> SendAsync(string path, string token, CancellationToken cancellationToken)
+    private async Task<HttpResponseMessage> SendAsync(string path, string token, CancellationToken cancellationToken)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         request.Headers.Accept.ParseAdd("application/json");
         request.Headers.AcceptLanguage.ParseAdd("en-GB");
         request.Headers.UserAgent.ParseAdd(UserAgent);
-        return _http.SendAsync(request, cancellationToken);
+        return await _http.SendAsync(request, cancellationToken);
     }
 
     // Without the trailing slash, "v2/..." would resolve against the wrong path.

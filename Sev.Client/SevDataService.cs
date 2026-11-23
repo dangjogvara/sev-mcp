@@ -135,14 +135,21 @@ public class SevDataService(SevClient sev, SevCache cache)
 
             var missing = MissingDays(cachedDays, meters, from, fetchEnd);
             var cachedBefore = cachedDays.Count;
-            var outcome = missing.Count > 0
-                ? await FetchMissingAsync(cachedDays, missing, from, fetchEnd, today, fetch)
-                : new FetchOutcome<TReading>([], null, false);
-
-            // Days are only ever added, so a higher count means something new to save.
-            if (cachedDays.Count > cachedBefore)
+            FetchOutcome<TReading> outcome;
+            try
             {
-                cache.Files?.SaveDays(cachedDays);
+                outcome = missing.Count > 0
+                    ? await FetchMissingAsync(cachedDays, missing, from, fetchEnd, today, fetch)
+                    : new FetchOutcome<TReading>([], null, false);
+            }
+            finally
+            {
+                // Days are only ever added, so a higher count means something new to save. Also when a later
+                // piece failed: the days from the pieces before it cost rate-limited calls too.
+                if (cachedDays.Count > cachedBefore)
+                {
+                    cache.Files?.SaveDays(cachedDays);
+                }
             }
 
             var days = DaysIn(from, to);

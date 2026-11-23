@@ -16,15 +16,16 @@ public static class SevServices
             .BindConfiguration(SevOptions.SectionName)
             .ValidateDataAnnotations()
             .Validate(o => MeterNicknames.Problems(o.MeterNicknames).Count == 0,
-                "Sev:MeterNicknames: every key must be a meter ID (a number, as list_meters shows it) and every nickname non-empty.")
+                "Sev:MeterNicknames: every key must be a meter ID (a number, as list_meters shows it), once per meter, and every nickname non-empty.")
             .ValidateOnStart();
         services.AddSingleton(sp => MeterNicknames.From(sp.GetRequiredService<IOptions<SevOptions>>().Value.MeterNicknames));
 
-        // The clock the tools read "now" from (tests can replace it).
+        // The one clock everything reads "now" from: the tools, the cache, the rate limiter and the logins
+        // (tests can replace it).
         services.TryAddSingleton(TimeProvider.System);
 
         // One rate limiter for every SEV call (login included), shared by both HttpClients below.
-        services.AddSingleton(new SevRateLimiter());
+        services.AddSingleton(sp => new SevRateLimiter(sp.GetRequiredService<TimeProvider>()));
         services.AddTransient<SevRateLimitHandler>();
 
         // One token provider for the whole server, so all tool calls share one login.
@@ -37,7 +38,7 @@ public static class SevServices
             {
                 BaseAddress = SevClient.DefaultBaseAddress
             };
-            return new SevTokenProvider(http, options.User, options.Key);
+            return new SevTokenProvider(http, options.User, options.Key, sp.GetRequiredService<TimeProvider>());
         });
 
         // Handlers run in the order added: SevAuthHandler first (may log in), then SevRateLimitHandler
@@ -53,12 +54,13 @@ public static class SevServices
         services.AddSingleton(sp =>
         {
             var directory = sp.GetRequiredService<IOptions<SevOptions>>().Value.CacheDirectory;
+            var time = sp.GetRequiredService<TimeProvider>();
             if (string.IsNullOrWhiteSpace(directory))
             {
-                return new SevCache();
+                return new SevCache(time);
             }
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger<SevCache>();
-            return new SevCache(files: new SevCacheFiles(directory, message => logger.LogInformation("{Message}", message)));
+            return new SevCache(time, new SevCacheFiles(directory, message => logger.LogInformation("{Message}", message)));
         });
         services.AddTransient<SevDataService>();
 

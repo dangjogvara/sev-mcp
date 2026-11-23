@@ -10,6 +10,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Only reads the code; the token gets nothing else.
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@v7

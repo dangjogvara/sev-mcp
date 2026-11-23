@@ -26,11 +26,13 @@ public class HeatPumpLog
         Load();
     }
 
-    public bool HasSample(DateTime hour)
+    // Whether the device has a sample for the hour. Per device, so a device that failed while another one was
+    // logged is still tried again within the hour.
+    public bool HasSample(string deviceId, DateTime hour)
     {
         lock (_lock)
         {
-            return _devices.Values.Any(d => d.Samples.ContainsKey(hour));
+            return _devices.TryGetValue(deviceId, out var device) && device.Samples.ContainsKey(hour);
         }
     }
 
@@ -53,11 +55,14 @@ public class HeatPumpLog
             {
                 return;
             }
+            // A parameter that occurs twice in one answer keeps its last value rather than losing the sample.
+            var values = new Dictionary<string, double>();
             foreach (var reading in readings)
             {
                 device.Parameters[reading.ParameterId] = new LoggedParameter(reading.ParameterId, reading.Name, reading.Unit, reading.Category);
+                values[reading.ParameterId] = reading.Value;
             }
-            device.Samples[hour] = readings.ToDictionary(r => r.ParameterId, r => r.Value);
+            device.Samples[hour] = values;
             SaveMonth(hour.Year, hour.Month);
         }
     }
@@ -176,10 +181,14 @@ public class HeatPumpLog
     private sealed record DeviceMonth(string DeviceId, string? Product, IReadOnlyList<LoggedParameter> Parameters, IReadOnlyList<LoggedSample> Samples);
 
     // Hours are local wall-clock times without an offset ("2026-11-22T18:00"), read back with Kind Unspecified.
+    // A value that isn't one throws JsonException, so Load skips the file instead of failing the server's start.
     private sealed class LocalHourConverter : System.Text.Json.Serialization.JsonConverter<DateTime>
     {
         public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) =>
-            DateTime.ParseExact(reader.GetString()!, "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture);
+            reader.TokenType == JsonTokenType.String
+            && DateTime.TryParseExact(reader.GetString(), "yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var hour)
+                ? hour
+                : throw new JsonException("An hour must look like 2026-11-22T18:00.");
 
         public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) =>
             writer.WriteStringValue(value.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture));

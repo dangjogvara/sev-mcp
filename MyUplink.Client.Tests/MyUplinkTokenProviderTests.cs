@@ -47,6 +47,23 @@ public class MyUplinkTokenProviderTests
         Assert.Equal(2, _handler.Requests.Count);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(60)]
+    public async Task UnusableLifetime_IsTakenAsAnHour(int expiresIn)
+    {
+        // Otherwise the token would count as expiring at once, and every request would log in again.
+        _handler.RespondWithToken("first", expiresIn);
+        _handler.RespondWithToken("second");
+
+        await _tokens.GetTokenAsync();
+        _time.Advance(MyUplinkTokenProvider.DefaultLifetime - MyUplinkTokenProvider.RenewalMargin - TimeSpan.FromSeconds(1));
+
+        Assert.Equal("first", await _tokens.GetTokenAsync());
+        Assert.Single(_handler.Requests);
+    }
+
     [Fact]
     public async Task Invalidate_LogsInAgainOnlyForTheCurrentToken()
     {
@@ -71,6 +88,7 @@ public class MyUplinkTokenProviderTests
 
         Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
         Assert.Contains("invalid_client", ex.ResponseBody);
+        Assert.True(ex.AtLogin);
     }
 
     [Fact]

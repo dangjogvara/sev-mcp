@@ -135,9 +135,9 @@ public static class HourlySummary
     private static string Installation(MeterSummary meter) =>
         (meter.InstallDate, meter.RemovalDate) switch
         {
-            ({ } installed, { } removed) => $"installed {installed:yyyy-MM-dd}, removed {removed:yyyy-MM-dd}",
-            ({ } installed, null) => $"installed {installed:yyyy-MM-dd}",
-            (null, { } removed) => $"removed {removed:yyyy-MM-dd}",
+            ({ } installed, { } removed) => string.Create(CultureInfo.InvariantCulture, $"installed {installed:yyyy-MM-dd}, removed {removed:yyyy-MM-dd}"),
+            ({ } installed, null) => string.Create(CultureInfo.InvariantCulture, $"installed {installed:yyyy-MM-dd}"),
+            (null, { } removed) => string.Create(CultureInfo.InvariantCulture, $"removed {removed:yyyy-MM-dd}"),
             _ => "no install date",
         };
 }

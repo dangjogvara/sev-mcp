@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using Sev.Client;
@@ -65,7 +66,7 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         var notes = new List<string>();
         if (from < loggedFrom)
         {
-            notes.Add($"Logging started {loggedFrom:yyyy-MM-dd HH:mm}; there are no readings before that.");
+            notes.Add(string.Create(CultureInfo.InvariantCulture, $"Logging started {loggedFrom:yyyy-MM-dd HH:mm}; there are no readings before that."));
         }
         var missingTotal = expected.Count(h => !samples.ContainsKey(h));
         if (missingTotal > 0)
@@ -75,7 +76,7 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
 
         return new HeatPumpHistoryResult(
             device.Product,
-            loggedFrom.ToString("yyyy-MM-dd'T'HH:mm"),
+            loggedFrom.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture),
             granularity.ToString().ToLowerInvariant(),
             notes.Count > 0 ? string.Join(" ", notes) : null,
             series);

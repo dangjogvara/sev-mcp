@@ -89,6 +89,17 @@ public class HeatPumpToolsTests
         Assert.Equal(new HeatPumpAlarm("Low flow", "Check the heating circuit.", 1, "2026-07-01T09:15", "Heat pump 1"), Assert.Single(result.Alarms));
     }
 
+    [Fact]
+    public void Describe_BadRequestMeansCredentialsOnlyAtLogin()
+    {
+        var atLogin = HeatPumpToolErrors.Describe(new MyUplinkApiException(HttpStatusCode.BadRequest, "invalid_client", null, atLogin: true));
+        var elsewhere = HeatPumpToolErrors.Describe(new MyUplinkApiException(HttpStatusCode.BadRequest, "bad device id", null));
+
+        Assert.Contains("credentials", atLogin);
+        Assert.DoesNotContain("credentials", elsewhere);
+        Assert.Contains("bad device id", elsewhere);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, "credentials")]
     [InlineData(HttpStatusCode.Forbidden, "credentials")]

@@ -10,6 +10,9 @@ public class MyUplinkTokenProvider
 {
     public static readonly TimeSpan RenewalMargin = TimeSpan.FromMinutes(5);
 
+    // Assumed when myUplink's answer gives no usable expires_in.
+    public static readonly TimeSpan DefaultLifetime = TimeSpan.FromHours(1);
+
     // Read-only: the tools never change the heat pump's settings.
     public const string Scope = "READSYSTEM";
 
@@ -87,14 +90,17 @@ public class MyUplinkTokenProvider
         var obtainedAt = _time.GetUtcNow();
 
         using var response = await _http.SendAsync(request, cancellationToken);
-        await MyUplinkApiException.ThrowIfFailedAsync(response, cancellationToken);
+        await MyUplinkApiException.ThrowIfFailedAsync(response, cancellationToken, atLogin: true);
 
         var answer = await response.Content.ReadFromJsonAsync<TokenResponse>(MyUplinkClient.JsonOptions, cancellationToken);
         if (string.IsNullOrWhiteSpace(answer?.AccessToken))
         {
             throw new InvalidOperationException("myUplink login succeeded but returned no access token.");
         }
-        return new TokenEntry(answer.AccessToken, obtainedAt + TimeSpan.FromSeconds(answer.ExpiresIn));
+        // A lifetime missing or within the renewal margin would mean a login before every request; myUplink's
+        // tokens last an hour, and a token it rejects earlier is renewed on the 401 anyway.
+        var lifetime = TimeSpan.FromSeconds(answer.ExpiresIn);
+        return new TokenEntry(answer.AccessToken, obtainedAt + (lifetime > RenewalMargin ? lifetime : DefaultLifetime));
     }
 
     private sealed record TokenEntry(string Token, DateTimeOffset ExpiresAt);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using Sev.Client;
 
 namespace Sev.Core;
@@ -48,7 +49,8 @@ public static class Periods
         }
         if (fromTime >= toTime)
         {
-            throw new InvalidInputException($"'from' ({fromTime:yyyy-MM-dd HH:mm}) must be before 'to' ({toTime:yyyy-MM-dd HH:mm}); 'to' is not included.");
+            throw new InvalidInputException(string.Create(CultureInfo.InvariantCulture,
+                $"'from' ({fromTime:yyyy-MM-dd HH:mm}) must be before 'to' ({toTime:yyyy-MM-dd HH:mm}); 'to' is not included."));
         }
         var maxRange = MaxRange(granularity);
         if (toTime - fromTime > maxRange)
@@ -62,12 +64,13 @@ public static class Periods
     }
 
     // The period a time falls in, as "2026-10-10T05:00", "2026-10-10" or "2026-10". ISO-style keys sort
-    // chronologically as strings.
+    // chronologically as strings. Invariant culture: in a format ':' is the culture's time separator ('.' in
+    // Danish), and some cultures use another calendar.
     public static string Key(DateTime time, Granularity granularity) => granularity switch
     {
-        Granularity.Hour => time.ToString("yyyy-MM-dd'T'HH:mm"),
-        Granularity.Day => time.ToString("yyyy-MM-dd"),
-        _ => time.ToString("yyyy-MM"),
+        Granularity.Hour => time.ToString("yyyy-MM-dd'T'HH:mm", CultureInfo.InvariantCulture),
+        Granularity.Day => time.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        _ => time.ToString("yyyy-MM", CultureInfo.InvariantCulture),
     };
 
     // The local hour starts in [from, to) that should have a reading by now: hours that have ended,
