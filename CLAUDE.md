@@ -27,7 +27,7 @@ claude mcp add --transport http sev http://localhost:5133/mcp   # connect Claude
 
 ## Configuration
 
-- `Sev` section (`SevOptions`): `User` and `Key` (required, the server refuses to start without them), and optional `CacheDirectory`. User-secrets locally (loaded only in the Development environment, which the launch profile sets); `Sev__User` etc. as environment variables when hosted.
+- `Sev` section (`SevOptions`): `User` and `Key` (required, the server refuses to start without them), and optional `CacheDirectory` and `MeterNicknames` (`Sev:MeterNicknames:<meter ID>`; `MeterNicknames` replaces SEV's nickname in `list_meters` and in meter matching for the usage tools; a key that isn't a number or an empty name stops the server at startup). User-secrets locally (loaded only in the Development environment, which the launch profile sets); `Sev__User` etc. as environment variables when hosted.
 - `Auth` section (`AuthOptions`): the hosted login, see [Login](#login).
 - `MyUplink` section (`MyUplinkOptions`): optional `ClientId`, `ClientSecret` and `LogHourly`, see [Heat pump](#heat-pump-myuplink).
 - `docs/deploy-azure.md` has the full settings reference.

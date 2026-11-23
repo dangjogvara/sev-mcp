@@ -18,4 +18,8 @@ public class SevOptions
     // /home/data/sev-cache: /home persists, while /home/site/wwwroot is replaced by every deploy.
     // Empty (the default, and normal locally) keeps the cache in memory only.
     public string? CacheDirectory { get; set; }
+
+    // Nicknames by meter ID (Sev__MeterNicknames__<meter ID>=House), for when SEV's portal can't set one.
+    // A configured nickname replaces SEV's. See MeterNicknames.
+    public Dictionary<string, string> MeterNicknames { get; set; } = [];
 }

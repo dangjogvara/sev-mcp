@@ -102,6 +102,16 @@ B1 runs one instance by default, so nothing needs doing; just don't change it. M
 
 The server answers `GET /health` (and `GET /`) with 200 without a login, and without calling SEV or myUplink. The setup script turns on App Service's Health check for `/health`: it pings it every minute and, with one instance, replaces the instance if it stays unhealthy for an hour. The status is under **Monitoring > Health check** on the web app. Turning Health check on or off restarts the app.
 
+## Meter nicknames
+
+SEV's API can't set a meter's nickname, so you can give your meters nicknames in the server's settings instead. Claude then shows them in `list_meters` and accepts them when you ask about a meter ("how much did the heat pump use?"). A nickname set here replaces SEV's for that meter. Use the meter IDs that `list_meters` shows:
+
+```bash
+az webapp config appsettings set -g sev-mcp -n <app> --settings Sev__MeterNicknames__12345=House Sev__MeterNicknames__67890="Heat pump"
+```
+
+Locally, use user-secrets: `dotnet user-secrets set "Sev:MeterNicknames:12345" "House" --project Sev.McpServer`. Changing app settings restarts the app. A key that isn't a meter ID, or an empty nickname, stops the server at startup with a message saying which.
+
 ## Your data and your secrets
 
 - Your credentials are app settings in your Azure subscription, and your usage and heat pump data are cached in your App Service (`/home/data/sev-cache`) and backed up to your own storage account. The server only talks to SEV, myUplink and your Claude.
@@ -124,6 +134,7 @@ The setup script sets these app settings (environment variables). You only need 
 | `Auth__Scopes__0` | `api://<client-id>/mcp.access` | The scope Claude asks for; tokens without it get 403. |
 | `Auth__AllowedUsers__0`, `__1`, ... | `<Entra object ID>` | Who may use the server; anyone else gets 403. |
 | `AllowedHosts` | `<app>.azurewebsites.net` | The host name the server answers to. |
+| `Sev__MeterNicknames__<meter ID>` | `House` | A nickname for the meter with that ID (as `list_meters` shows it), replacing SEV's. One setting per meter. Optional. |
 | `Sev__CacheDirectory` | `/home/data/sev-cache` | Where the cache and the heat pump log are saved so they survive restarts. Optional. |
 | `MyUplink__ClientId`, `MyUplink__ClientSecret` | from dev.myuplink.com | Turn on the heat pump tools and the hourly log ([heat-pump.md](heat-pump.md)). Optional. |
 | `MyUplink__LogHourly` | `false` | Turns the hourly heat pump log off. Optional; on by default. |

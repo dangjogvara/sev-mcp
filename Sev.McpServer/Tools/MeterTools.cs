@@ -6,7 +6,7 @@ using Sev.Client.Models;
 namespace Sev.McpServer.Tools;
 
 [McpServerToolType]
-public class MeterTools(SevDataService sev)
+public class MeterTools(SevDataService sev, MeterNicknames nicknames)
 {
     [McpServerTool(Name = "list_meters", Title = "List electricity meters", ReadOnly = true, Idempotent = true)]
     [Description(
@@ -15,7 +15,7 @@ public class MeterTools(SevDataService sev)
         "The list is cached for a few hours, so calling it again is cheap.")]
     public Task<IReadOnlyList<MeterSummary>> ListMetersAsync(CancellationToken cancellationToken) =>
         SevToolErrors.CallAsync(async () =>
-            SevToolErrors.ThrowIfEmpty(Summarize(await sev.GetAvailableMetersAsync(cancellationToken))));
+            SevToolErrors.ThrowIfEmpty(nicknames.Apply(Summarize(await sev.GetAvailableMetersAsync(cancellationToken)))));
 
     // Flattens SEV's customer → installation → meter hierarchy into one row per meter.
     public static IReadOnlyList<MeterSummary> Summarize(IReadOnlyList<Customer> customers) =>

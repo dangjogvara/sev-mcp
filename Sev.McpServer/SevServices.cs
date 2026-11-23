@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Sev.Client;
+using Sev.McpServer.Tools;
 
 namespace Sev.McpServer;
 
@@ -14,7 +15,10 @@ public static class SevServices
             .AddOptions<SevOptions>()
             .BindConfiguration(SevOptions.SectionName)
             .ValidateDataAnnotations()
+            .Validate(o => MeterNicknames.Problems(o.MeterNicknames).Count == 0,
+                "Sev:MeterNicknames: every key must be a meter ID (a number, as list_meters shows it) and every nickname non-empty.")
             .ValidateOnStart();
+        services.AddSingleton(sp => MeterNicknames.From(sp.GetRequiredService<IOptions<SevOptions>>().Value.MeterNicknames));
 
         // The clock the tools read "now" from (tests can replace it).
         services.TryAddSingleton(TimeProvider.System);
