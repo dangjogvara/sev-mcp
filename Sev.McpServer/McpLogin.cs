@@ -1,5 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.HttpOverrides;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Authentication;
@@ -12,6 +14,8 @@ namespace Sev.McpServer;
 //   names the MCP URL and the authorization server, where Claude logs the user in.
 // - Requests then carry an access token, which JwtBearer checks (signature, issuer, audience, expiry). Only
 //   users in AuthOptions.AllowedUsers whose token holds one of AuthOptions.Scopes ("scp" claim) get through.
+//   An allowed user whose token lacks a required scope gets 403 with WWW-Authenticate: Bearer
+//   error="insufficient_scope", ...; a disallowed user gets a plain 403.
 public static class McpLogin
 {
     public const string AllowedUsersPolicy = "AllowedUsers";
@@ -100,7 +104,9 @@ public static class McpLogin
         services.AddAuthorization(options => options.AddPolicy(AllowedUsersPolicy, policy => policy
             .RequireAuthenticatedUser()
             .RequireClaim("oid", auth.AllowedUsers)
-            .RequireAssertion(context => HasRequiredScope(context.User, requiredScopes))));
+            .AddRequirements(new RequiredScopeRequirement(requiredScopes))));
+        services.AddSingleton<IAuthorizationMiddlewareResultHandler>(
+            new InsufficientScopeResultHandler(string.Join(" ", auth.Scopes.Select(s => s.Trim()))));
 
         // App Service ends HTTPS at its front end and forwards plain HTTP with X-Forwarded-Proto: https.
         // Honouring it makes the metadata URL in the 401 challenge start with https, as Claude requires.
@@ -115,8 +121,53 @@ public static class McpLogin
     }
 
     // Entra sends granted delegated scopes as a space-delimited "scp" claim.
-    private static bool HasRequiredScope(ClaimsPrincipal user, HashSet<string> requiredScopes) =>
+    private static bool HasRequiredScope(ClaimsPrincipal user, IReadOnlySet<string> requiredScopes) =>
         user.FindAll("scp")
             .SelectMany(claim => claim.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .Any(requiredScopes.Contains);
+
+    private static string ResourceMetadataUrl(HttpRequest request) =>
+        $"{request.Scheme}://{request.Host}{request.PathBase}/.well-known/oauth-protected-resource{request.Path.Value?.TrimEnd('/')}";
+
+    private sealed class RequiredScopeRequirement(IReadOnlySet<string> requiredScopes)
+        : AuthorizationHandler<RequiredScopeRequirement>, IAuthorizationRequirement
+    {
+        protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, RequiredScopeRequirement requirement)
+        {
+            if (HasRequiredScope(context.User, requiredScopes))
+            {
+                context.Succeed(requirement);
+            }
+            return Task.CompletedTask;
+        }
+    }
+
+    // Tell the client which scopes to ask for when an allowed user's token lacks a required scope;
+    // disallowed users fall through to the default plain 403.
+    private sealed class InsufficientScopeResultHandler(string scopes) : IAuthorizationMiddlewareResultHandler
+    {
+        private readonly AuthorizationMiddlewareResultHandler _defaultHandler = new();
+
+        public Task HandleAsync(
+            RequestDelegate next,
+            HttpContext context,
+            AuthorizationPolicy policy,
+            PolicyAuthorizationResult authorizeResult)
+        {
+            var failed = authorizeResult.AuthorizationFailure?.FailedRequirements.ToList();
+            var missingScopeOnly = authorizeResult.Forbidden
+                && failed is { Count: > 0 }
+                && failed.All(r => r is RequiredScopeRequirement);
+
+            if (missingScopeOnly)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                context.Response.Headers.WWWAuthenticate =
+                    $"Bearer error=\"insufficient_scope\", scope=\"{scopes}\", resource_metadata=\"{ResourceMetadataUrl(context.Request)}\"";
+                return Task.CompletedTask;
+            }
+
+            return _defaultHandler.HandleAsync(next, context, policy, authorizeResult);
+        }
+    }
 }

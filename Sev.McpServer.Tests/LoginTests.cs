@@ -79,14 +79,17 @@ public class LoginTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
-    [Fact]
-    public async Task OtherUserWithValidToken_IsForbidden()
+    [Theory]
+    [InlineData("mcp.access")]
+    [InlineData(null)]
+    public async Task OtherUserWithValidToken_IsForbidden(string? scope)
     {
         using var factory = Server(withAuth: true);
 
-        var response = await factory.CreateClient().SendAsync(InitializeRequest(Token("22222222-2222-2222-2222-222222222222")));
+        var response = await factory.CreateClient().SendAsync(InitializeRequest(Token("22222222-2222-2222-2222-222222222222", scope: scope)));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(response.Headers.WwwAuthenticate);
     }
 
     [Theory]
@@ -103,6 +106,38 @@ public class LoginTests
         var response = await factory.CreateClient().SendAsync(InitializeRequest(Token(AllowedUser, scope: scope)));
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(
+            $"Bearer error=\"insufficient_scope\", scope=\"{Scope}\", resource_metadata=\"http://localhost/.well-known/oauth-protected-resource/mcp\"",
+            Assert.Single(response.Headers.WwwAuthenticate).ToString());
+    }
+
+    [Fact]
+    public async Task TokenWithoutRequiredScope_BehindHttpsProxy_UsesHttpsMetadata()
+    {
+        using var factory = Server(withAuth: true);
+        var request = InitializeRequest(Token(AllowedUser, scope: null));
+        request.Headers.Add("X-Forwarded-Proto", "https");
+
+        var response = await factory.CreateClient().SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(
+            $"Bearer error=\"insufficient_scope\", scope=\"{Scope}\", resource_metadata=\"https://localhost/.well-known/oauth-protected-resource/mcp\"",
+            Assert.Single(response.Headers.WwwAuthenticate).ToString());
+    }
+
+    [Fact]
+    public async Task TokenWithoutRequiredScope_ListsAllConfiguredScopes()
+    {
+        const string extraScope = "api://api-client-id/mcp.extra";
+        using var factory = Server(withAuth: true, scopes: [Scope, extraScope]);
+
+        var response = await factory.CreateClient().SendAsync(InitializeRequest(Token(AllowedUser, scope: null)));
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(
+            $"Bearer error=\"insufficient_scope\", scope=\"{Scope} {extraScope}\", resource_metadata=\"http://localhost/.well-known/oauth-protected-resource/mcp\"",
+            Assert.Single(response.Headers.WwwAuthenticate).ToString());
     }
 
     [Fact]
@@ -184,7 +219,8 @@ public class LoginTests
         Assert.Contains("Auth:AllowedUsers", Messages(ex));
     }
 
-    private static WebApplicationFactory<Program> Server(bool withAuth, string environment = "Development", string? allowedUser = AllowedUser) =>
+    private static WebApplicationFactory<Program> Server(
+        bool withAuth, string environment = "Development", string? allowedUser = AllowedUser, string[]? scopes = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment(environment);
@@ -198,7 +234,11 @@ public class LoginTests
             builder.UseSetting("Auth:Authority", Issuer);
             builder.UseSetting("Auth:Resource", Resource);
             builder.UseSetting("Auth:Audiences:0", Audience);
-            builder.UseSetting("Auth:Scopes:0", Scope);
+            var scopeList = scopes ?? [Scope];
+            for (var i = 0; i < scopeList.Length; i++)
+            {
+                builder.UseSetting($"Auth:Scopes:{i}", scopeList[i]);
+            }
             if (allowedUser is not null)
             {
                 builder.UseSetting("Auth:AllowedUsers:0", allowedUser);
