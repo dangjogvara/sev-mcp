@@ -59,6 +59,55 @@ public partial class SevDataServiceTests
         Assert.Equal(2, _handler.Requests.Count);
     }
 
+    [Fact]
+    public async Task Meters_ExpiredListFallsBackToCached_OnEmptyAnswerAndRetriesNextTime()
+    {
+        _handler.RespondWithFixture("get_available_meters.json");
+        _handler.Respond("[]");
+        _handler.RespondWithFixture("get_available_meters.json");
+
+        var original = await _data.GetAvailableMetersAsync();
+        _time.Advance(SevCache.MeterListLifetime);
+
+        // Throttled refresh keeps returning the stale list instead of failing cached queries.
+        var fallback = await _data.GetAvailableMetersAsync();
+        // MetersFetchedAt wasn't extended, so the next call tries again and refreshes.
+        var refreshed = await _data.GetAvailableMetersAsync();
+
+        Assert.Same(original, fallback);
+        Assert.NotSame(original, refreshed);
+        Assert.Equal(3, _handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Meters_ExpiredListFallsBackToCached_OnLocalRateLimit()
+    {
+        var limiter = new SevRateLimiter(_time, maxCalls: 1);
+        var limited = new SevDataService(
+            new SevClient(new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = _handler })
+            {
+                BaseAddress = SevClient.DefaultBaseAddress
+            }),
+            _cache);
+        _handler.RespondWithFixture("get_available_meters.json");
+        _handler.RespondWithFixture("get_available_meters.json");
+
+        var original = await limited.GetAvailableMetersAsync();
+        _time.Advance(SevCache.MeterListLifetime);
+        Assert.True(limiter.TryAcquire(out _));
+
+        // Rate limit is full when the 6-hour lifetime expires: fall back to the stale list.
+        var fallback = await limited.GetAvailableMetersAsync();
+        Assert.Same(original, fallback);
+        Assert.Single(_handler.Requests);
+
+        // Once the rate-limit window clears, the next call refreshes (MetersFetchedAt wasn't extended).
+        _time.Advance(SevRateLimiter.DefaultWindow);
+        var refreshed = await limited.GetAvailableMetersAsync();
+        Assert.NotSame(original, refreshed);
+        Assert.Equal(2, _handler.Requests.Count);
+    }
+
     // --- Usage ---
 
     [Fact]
@@ -265,6 +314,60 @@ public partial class SevDataServiceTests
     }
 
     [Fact]
+    public async Task Usage_NormalDayMissingLastHour_IsNotCached()
+    {
+        // 23 readings on a 24-hour day (e.g. E360 lagging right after midnight): must not be frozen incomplete.
+        _handler.Respond(UsageJson((1111, Day(-1), 23)));
+        _handler.Respond(UsageJson((1111, Day(-1), 24)));
+
+        var first = await UsageAsync([1111], Start(Day(-1)), Start(Today));
+        var second = await UsageAsync([1111], Start(Day(-1)), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.Equal(23, first.Single().Readings.Count);
+        Assert.Equal(24, second.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_SummerTimeStartDayWith23Readings_IsCached()
+    {
+        // Summer time starts 2026-03-29 in Atlantic/Faroe (01:00 is skipped), so 23 distinct hours is a full day.
+        var dstClock = new FakeTimeProvider(new DateTimeOffset(2026, 3, 30, 12, 0, 0, TimeSpan.Zero));
+        var dstData = new SevDataService(
+            new SevClient(new HttpClient(_handler) { BaseAddress = SevClient.DefaultBaseAddress }),
+            new SevCache(dstClock));
+        var dstDay = new DateOnly(2026, 3, 29);
+        var readings = Enumerable.Range(0, 24)
+            .Where(h => h != 1)
+            .Select(h => new { time_stamp = Start(dstDay).AddHours(h).ToString("s", CultureInfo.InvariantCulture), reading = 1.0m, cumulative_value = (decimal?)null, unit = "kWh" });
+        _handler.Respond(JsonSerializer.Serialize(new[] { new { meter_id = "1111", readings } }));
+
+        var first = await dstData.GetHourlyUsageAsync([1111], Start(dstDay), Start(dstDay.AddDays(1)));
+        var second = await dstData.GetHourlyUsageAsync([1111], Start(dstDay), Start(dstDay.AddDays(1)));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal(23, first.Meters.Single().Readings.Count);
+        Assert.Equal(23, second.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_DuplicateTimestampDoesNotCountAsCompleteDay()
+    {
+        // 24 readings with 00:00 repeated and 23:00 missing: only 23 distinct hours, so not cached.
+        var day = Day(-1);
+        var readings = Enumerable.Range(0, 23).Prepend(0)
+            .Select(h => new { time_stamp = Start(day).AddHours(h).ToString("s", CultureInfo.InvariantCulture), reading = 1.0m, cumulative_value = (decimal?)null, unit = "kWh" });
+        _handler.Respond(JsonSerializer.Serialize(new[] { new { meter_id = "1111", readings } }));
+        _handler.Respond(UsageJson((1111, day, 24)));
+
+        await UsageAsync([1111], Start(day), Start(Today));
+        var second = await UsageAsync([1111], Start(day), Start(Today));
+
+        Assert.Equal(2, _handler.Requests.Count);
+        Assert.Equal(24, second.Single().Readings.Count);
+    }
+
+    [Fact]
     public async Task Usage_EmptyAnswer_ReturnsCachedDaysAndReportsTheRestAsNotFetched()
     {
         _handler.Respond(UsageJson((1111, Day(-3), 24)));
@@ -394,6 +497,46 @@ public partial class SevDataServiceTests
         Assert.Single(_handler.Requests);
         Assert.Equal((Start(Day(-60)), Start(Day(-31))), result.NotFetched);
         Assert.Equal(31 * 24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_RateLimitOnFirstPiece_ReturnsCachedDaysAndReportsRestAsNotFetched()
+    {
+        // Day -3 is cached; when day -2 hits the local rate limit on piece 0, day -3 is still returned.
+        _handler.Respond(UsageJson((1111, Day(-3), 24)));
+        await UsageAsync([1111], Start(Day(-3)), Start(Day(-2)));
+
+        var limiter = new SevRateLimiter(_time, maxCalls: 1);
+        Assert.True(limiter.TryAcquire(out _));
+        var limited = new SevDataService(
+            new SevClient(new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = _handler })
+            {
+                BaseAddress = SevClient.DefaultBaseAddress
+            }),
+            _cache);
+
+        var result = await limited.GetHourlyUsageAsync([1111], Start(Day(-3)), Start(Day(-1)));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal((Start(Day(-2)), Start(Day(-1))), result.NotFetched);
+        Assert.False(result.EmptyAnswer);
+        Assert.Equal(24, result.Meters.Single().Readings.Count);
+    }
+
+    [Fact]
+    public async Task Usage_RateLimitOnFirstPieceWithNothingCached_ThrowsRateLimitException()
+    {
+        var limiter = new SevRateLimiter(_time, maxCalls: 1);
+        Assert.True(limiter.TryAcquire(out _));
+        var limited = new SevDataService(
+            new SevClient(new HttpClient(new SevRateLimitHandler(limiter) { InnerHandler = _handler })
+            {
+                BaseAddress = SevClient.DefaultBaseAddress
+            }),
+            _cache);
+
+        await Assert.ThrowsAsync<SevRateLimitExceededException>(
+            () => limited.GetHourlyUsageAsync([1111], Start(Day(-2)), Start(Day(-1))));
     }
 
     [Fact]

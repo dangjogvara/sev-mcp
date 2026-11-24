@@ -15,4 +15,20 @@ public static class SevTime
     // 10:37 becomes 10:00. Readings are stamped with the start of their hour, and the current hour has no reading yet.
     public static DateTime StartOfHour(DateTime time) =>
         new(time.Year, time.Month, time.Day, time.Hour, 0, 0, time.Kind);
+
+    // The local hours on a Faroese calendar day: 23 when summer time starts (01:00 is skipped), 24 otherwise
+    // (on the day summer time ends the repeated hour shares one local timestamp).
+    public static int HoursInDay(DateOnly day)
+    {
+        var start = day.ToDateTime(TimeOnly.MinValue);
+        var count = 0;
+        for (var hour = 0; hour < 24; hour++)
+        {
+            if (!Zone.IsInvalidTime(start.AddHours(hour)))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
 }
