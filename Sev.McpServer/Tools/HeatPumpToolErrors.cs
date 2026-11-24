@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ModelContextProtocol;
 using MyUplink.Client;
 
@@ -8,7 +9,7 @@ namespace Sev.McpServer.Tools;
 // failures are turned into messages it can act on or pass to the user.
 public static class HeatPumpToolErrors
 {
-    public static async Task<T> CallAsync<T>(Func<Task<T>> call)
+    public static async Task<T> CallAsync<T>(Func<Task<T>> call, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -17,6 +18,18 @@ public static class HeatPumpToolErrors
         catch (MyUplinkApiException ex)
         {
             throw new McpException(Describe(ex), ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new McpException($"Could not reach myUplink: {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex is TimeoutException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            throw new McpException("myUplink timed out. Try again in a moment.", ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new McpException("myUplink returned an unexpected response that could not be read.", ex);
         }
     }
 

@@ -82,16 +82,32 @@ public class HeatPumpLogTests : IDisposable
         Assert.Contains(_messages, m => m.StartsWith("Loaded 2 logged heat pump hours"));
     }
 
-    [Fact]
-    public void UnreadableFile_IsIgnored()
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("""{"version": 1}""")]
+    public void UnreadableFile_IsIgnored(string content)
     {
         Directory.CreateDirectory(_directory);
-        File.WriteAllText(Path.Combine(_directory, "HeatPumpLog-2026-11.json"), "not json");
+        File.WriteAllText(Path.Combine(_directory, "HeatPumpLog-2026-11.json"), content);
 
         var log = new HeatPumpLog(_directory, _messages.Add);
 
         Assert.Empty(log.Snapshot());
         Assert.Contains(_messages, m => m.StartsWith("Ignoring"));
+    }
+
+    [Fact]
+    public void FileWithMissingDeviceLists_DoesNotThrow()
+    {
+        Directory.CreateDirectory(_directory);
+        File.WriteAllText(Path.Combine(_directory, "HeatPumpLog-2026-11.json"),
+            """{"version":1,"devices":[{"deviceId":"DEV1"}]}""");
+
+        var log = new HeatPumpLog(_directory, _messages.Add);
+
+        var device = Assert.Single(log.Snapshot());
+        Assert.Empty(device.Parameters);
+        Assert.Empty(device.Samples);
     }
 
     [Theory]

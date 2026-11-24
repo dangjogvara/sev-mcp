@@ -100,21 +100,36 @@ public class HeatPumpLog
                     _log?.Invoke($"Ignoring {path}: not format version {FormatVersion}.");
                     continue;
                 }
+                if (file.Devices is null)
+                {
+                    _log?.Invoke($"Ignoring {path}: missing devices.");
+                    continue;
+                }
                 foreach (var d in file.Devices)
                 {
+                    if (string.IsNullOrEmpty(d?.DeviceId))
+                    {
+                        continue;
+                    }
                     if (!_devices.TryGetValue(d.DeviceId, out var device))
                     {
                         _devices[d.DeviceId] = device = new DeviceLog(d.DeviceId);
                     }
                     device.Product = d.Product ?? device.Product;
-                    foreach (var parameter in d.Parameters)
+                    foreach (var parameter in d.Parameters ?? [])
                     {
-                        device.Parameters[parameter.Id] = parameter;
+                        if (!string.IsNullOrEmpty(parameter?.Id))
+                        {
+                            device.Parameters[parameter.Id] = parameter;
+                        }
                     }
-                    foreach (var sample in d.Samples)
+                    foreach (var sample in d.Samples ?? [])
                     {
-                        device.Samples[sample.Hour] = new Dictionary<string, double>(sample.Values);
-                        samples++;
+                        if (sample?.Values is not null)
+                        {
+                            device.Samples[sample.Hour] = new Dictionary<string, double>(sample.Values);
+                            samples++;
+                        }
                     }
                 }
             }

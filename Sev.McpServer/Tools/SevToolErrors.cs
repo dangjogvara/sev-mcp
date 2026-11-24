@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ModelContextProtocol;
 using Sev.Client;
 
@@ -8,7 +9,7 @@ namespace Sev.McpServer.Tools;
 // generic error. Translate SEV failures into messages Claude can act on or pass to the user.
 public static class SevToolErrors
 {
-    public static async Task<T> CallAsync<T>(Func<Task<T>> call)
+    public static async Task<T> CallAsync<T>(Func<Task<T>> call, CancellationToken cancellationToken = default)
     {
         try
         {
@@ -23,6 +24,18 @@ public static class SevToolErrors
             throw new McpException(
                 $"The SEV API allows only 10 calls per 5 minutes and they are used up. Try again in {Math.Ceiling(ex.RetryAfter.TotalSeconds)} seconds.",
                 ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new McpException($"Could not reach the SEV API: {ex.Message}", ex);
+        }
+        catch (Exception ex) when (ex is TimeoutException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            throw new McpException("The SEV API timed out. Try again in a moment.", ex);
+        }
+        catch (JsonException ex)
+        {
+            throw new McpException("The SEV API returned an unexpected response that could not be read.", ex);
         }
     }
 

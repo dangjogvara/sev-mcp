@@ -116,7 +116,7 @@ public class UsageTools(SevDataService sev, TimeProvider time, MeterNicknames ni
                 selected, result.Meters, fromTime, toTime, localNow, bucket, result.NotFetched,
                 defaultUnit, decimals);
             return addDetails is null ? summaries : summaries.Select(s => addDetails(s, result)).ToList();
-        });
+        }, cancellationToken);
     }
 
     // Matches each requested item against meter ID, nickname, meter name or address (case-insensitive;

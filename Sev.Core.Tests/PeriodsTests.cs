@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Globalization;
 using Sev.Core;
 
 namespace Sev.Core.Tests;

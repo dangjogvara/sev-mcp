@@ -38,7 +38,7 @@ public class HeatPumpTools(MyUplinkClient myUplink)
             return results.Count > 0
                 ? results
                 : throw new McpException("myUplink lists no heat pumps on this account.");
-        });
+        }, cancellationToken);
 
     // Turns myUplink's answers into the tool's result: values grouped by category, in the order myUplink sends
     // them, leaving out parameters without an English name and sensors that aren't connected. Coded values

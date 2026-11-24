@@ -50,16 +50,28 @@ public class SevCacheFiles(string directory, Action<string>? log = null)
 
     private void LoadDays<TReading>(Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<TReading>> days)
     {
-        var file = Read<DaysFile<TReading>>(DaysFileName<TReading>());
+        var fileName = DaysFileName<TReading>();
+        var file = Read<DaysFile<TReading>>(fileName);
         if (file is null)
         {
             return;
         }
+        if (file.Days is null)
+        {
+            log?.Invoke($"Ignoring {Path.Combine(Directory, fileName)}: missing days.");
+            return;
+        }
+        var loaded = 0;
         foreach (var entry in file.Days)
         {
+            if (entry?.Readings is null)
+            {
+                continue;
+            }
             days[(entry.MeterId, entry.Day)] = entry.Readings;
+            loaded++;
         }
-        log?.Invoke($"Loaded {file.Days.Count} cached days from {DaysFileName<TReading>()}.");
+        log?.Invoke($"Loaded {loaded} cached days from {fileName}.");
     }
 
     private static string DaysFileName<TReading>() => $"{typeof(TReading).Name}.json";
