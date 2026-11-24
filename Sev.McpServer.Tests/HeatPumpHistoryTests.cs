@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol;
 using MyUplink.Client;
 using Sev.Core;
@@ -69,6 +71,47 @@ public class HeatPumpHistoryTests
         Assert.Equal(4, log.Snapshot().Single(d => d.DeviceId == "DEV1").Samples.Single().Values["62000"]);
     }
 
+    [Fact]
+    public async Task TakeSample_EmptyLoggableReadings_IsNotCountedAsLogged()
+    {
+        var log = new HeatPumpLog();
+        var client = ClientAnswering(
+            """{"systems":[{"systemId":"SYS1","name":"Home","hasAlarm":false,"devices":[{"id":"DEV1","connectionState":"Connected","product":{"name":"CTC"}}]}]}""",
+            """[{"category":"General","parameterId":"62002","parameterName":"Text not found: id[]","writable":false,"value":0}]""");
+
+        var sample = await HeatPumpLogger.TakeSampleAsync(client, log, Hour, CancellationToken.None);
+
+        Assert.Equal(0, sample.Logged);
+        Assert.Empty(log.Snapshot());
+        Assert.False(log.HasSample("DEV1", Hour));
+    }
+
+    [Fact]
+    public async Task SampleIfDue_EmptyDeviceList_StillPollsOnNextCheck()
+    {
+        var log = new HeatPumpLog();
+        var systemsCalls = 0;
+        var client = ClientAnswering(path => path switch
+        {
+            "/oauth/token" => """{"access_token":"t","expires_in":3600}""",
+            "/v2/systems/me" when ++systemsCalls == 1 => """{"systems":[]}""",
+            "/v2/systems/me" => """{"systems":[{"systemId":"SYS1","name":"Home","hasAlarm":false,"devices":[{"id":"DEV1","connectionState":"Connected","product":{"name":"CTC"}}]}]}""",
+            _ when path.EndsWith("/points") => """[{"category":"General","parameterId":"62000","parameterName":"Outdoor Temperature","parameterUnit":"°C","writable":false,"value":5.5}]""",
+            _ => throw new InvalidOperationException("Unexpected request " + path),
+        });
+        var services = new ServiceCollection();
+        services.AddSingleton(client);
+        using var provider = services.BuildServiceProvider();
+        var clock = new FixedClock(new DateTimeOffset(2026, 11, 22, 18, 0, 0, TimeSpan.Zero));
+        var logger = new HeatPumpLogger(provider.GetRequiredService<IServiceScopeFactory>(), log, clock, NullLogger<HeatPumpLogger>.Instance);
+
+        await logger.SampleIfDueAsync(CancellationToken.None);
+        await logger.SampleIfDueAsync(CancellationToken.None);
+
+        Assert.Equal(2, systemsCalls);
+        Assert.True(log.HasSample("DEV1", Hour));
+    }
+
     // --- get_heatpump_history ---
 
     [Fact]
@@ -130,6 +173,20 @@ public class HeatPumpHistoryTests
     }
 
     [Fact]
+    public void History_CurrentHourBeforeSampled_IsNotReportedAsMissing()
+    {
+        // At 19:02 the 19:00 sample hasn't been taken yet (logger checks every 5 minutes), so 19:00 isn't missing.
+        var log = new HeatPumpLog();
+        log.Add("DEV1", "CTC", Hour, [Outdoor(5)]);
+
+        var result = Assert.Single(HeatPumpHistoryTools.Summarize(
+            log.Snapshot(), Hour, Hour.AddHours(2), Hour.AddHours(1).AddMinutes(2), Granularity.Day, null));
+
+        Assert.Null(result.Note);
+        Assert.Equal(new HeatPumpPeriod("2026-11-22", null, 5, 5, 5, null), Assert.Single(Assert.Single(result.Series).Periods));
+    }
+
+    [Fact]
     public void History_NothingLoggedYet()
     {
         var ex = Assert.Throws<McpException>(() =>
@@ -144,17 +201,25 @@ public class HeatPumpHistoryTests
         new(id, name, unit, "General", value);
 
     // A MyUplinkClient whose network answers the token, systems and points requests with canned JSON.
-    private static MyUplinkClient ClientAnswering(string systemsJson, string pointsJson)
-    {
-        var handler = new CannedHandler(path => path switch
+    private static MyUplinkClient ClientAnswering(string systemsJson, string pointsJson) =>
+        ClientAnswering(path => path switch
         {
             "/oauth/token" => """{"access_token":"t","expires_in":3600}""",
             "/v2/systems/me" => systemsJson,
             _ when path.EndsWith("/points") => pointsJson,
             _ => throw new InvalidOperationException("Unexpected request " + path),
         });
+
+    private static MyUplinkClient ClientAnswering(Func<string, string> answer)
+    {
+        var handler = new CannedHandler(answer);
         var tokens = new MyUplinkTokenProvider(new HttpClient(handler) { BaseAddress = MyUplinkClient.DefaultBaseAddress }, "id", "secret");
         return new MyUplinkClient(new HttpClient(handler) { BaseAddress = MyUplinkClient.DefaultBaseAddress }, tokens);
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private sealed class CannedHandler(Func<string, string> answer) : HttpMessageHandler
