@@ -34,14 +34,26 @@ public class SevDataService(SevClient sev, SevCache cache)
                 return cache.Meters;
             }
 
-            var customers = await sev.GetAvailableMetersAsync(cancellationToken);
+            IReadOnlyList<Customer> customers;
+            try
+            {
+                customers = await sev.GetAvailableMetersAsync(cancellationToken);
+            }
+            catch (SevRateLimitExceededException) when (cache.Meters is not null)
+            {
+                // Keep using the stale list while throttled so cached hourly queries still work; MetersFetchedAt
+                // stays old so the next call refreshes once the limit clears.
+                return cache.Meters;
+            }
+
             if (customers.Count > 0)
             {
                 cache.Meters = customers;
                 cache.MetersFetchedAt = now;
                 cache.Files?.SaveMeters(customers, now);
+                return customers;
             }
-            return customers;
+            return cache.Meters ?? customers;
         }
         finally
         {
@@ -133,13 +145,15 @@ public class SevDataService(SevClient sev, SevCache cache)
             var currentHour = SevTime.StartOfHour(now);
             var fetchEnd = to < currentHour ? to : currentHour;
 
+            var days = DaysIn(from, to);
+            var hasCachedData = meters.Any(m => days.Any(d => cachedDays.TryGetValue((m, d), out var r) && r.Count > 0));
             var missing = MissingDays(cachedDays, meters, from, fetchEnd);
             var cachedBefore = cachedDays.Count;
             FetchOutcome<TReading> outcome;
             try
             {
                 outcome = missing.Count > 0
-                    ? await FetchMissingAsync(cachedDays, missing, from, fetchEnd, today, fetch)
+                    ? await FetchMissingAsync(cachedDays, missing, from, fetchEnd, today, hasCachedData, fetch)
                     : new FetchOutcome<TReading>([], null, false);
             }
             finally
@@ -152,7 +166,6 @@ public class SevDataService(SevClient sev, SevCache cache)
                 }
             }
 
-            var days = DaysIn(from, to);
             var result = meters
                 .Select(meter => (Meter: meter, Readings: Collect(cachedDays, meter, days, outcome.Readings, from, to)))
                 .Where(m => m.Readings is not null)
@@ -190,14 +203,15 @@ public class SevDataService(SevClient sev, SevCache cache)
     // Fetches the missing days from SEV in pieces of at most MaxDaysPerRequest days, newest first, skipping
     // stretches where every requested meter is already cached. Missing past days are fetched as whole days
     // so they can be cached; today up to the current hour. It stops after MaxRequestsPerCall pieces, at a
-    // rate-limit refusal after the first piece, or at an empty answer (most likely the rate limit), and reports
-    // the older part it didn't get to.
+    // rate-limit refusal (keeping any already-cached or fetched data), or at an empty answer (most likely
+    // the rate limit), and reports the older part it didn't get to.
     private static async Task<FetchOutcome<TReading>> FetchMissingAsync<TReading>(
         Dictionary<(int MeterId, DateOnly Day), IReadOnlyList<TReading>> cachedDays,
         List<(int Meter, DateOnly Day)> missing,
         DateTime from,
         DateTime fetchEnd,
         DateOnly today,
+        bool hasCachedData,
         FetchPiece<TReading> fetch)
         where TReading : IHourlyReading
     {
@@ -228,9 +242,10 @@ public class SevDataService(SevClient sev, SevCache cache)
             {
                 answer = await fetch(pieceMeters, pieceFrom, pieceTo);
             }
-            catch (SevRateLimitExceededException) when (anyAnswer)
+            catch (SevRateLimitExceededException) when (anyAnswer || hasCachedData)
             {
-                // Keep what was fetched; the rest is reported as not fetched.
+                // Keep what was fetched or already cached; the rest is reported as not fetched.
+                // When nothing is cached or fetched, let the exception propagate so the caller gets RetryAfter.
                 return new FetchOutcome<TReading>(fetched, (notFetchedFrom, pieceTo), false);
             }
 
@@ -293,6 +308,7 @@ public class SevDataService(SevClient sev, SevCache cache)
                 break;
             }
 
+            var requiredHours = SevTime.HoursInDay(day);
             foreach (var meter in meters)
             {
                 if (!missingSet.Contains((meter, day)))
@@ -300,7 +316,7 @@ public class SevDataService(SevClient sev, SevCache cache)
                     continue;
                 }
                 var readings = byMeterAndDay[(meter.ToString(), day)].OrderBy(r => r.TimeStamp).ToList();
-                if (readings.Count >= SevCache.MinReadingsForCompleteDay || day < finalBefore)
+                if (readings.Select(r => r.TimeStamp).Distinct().Count() >= requiredHours || day < finalBefore)
                 {
                     cachedDays[(meter, day)] = readings;
                 }
