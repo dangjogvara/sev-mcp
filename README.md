@@ -80,7 +80,7 @@ A small web frontend (Blazor) is in progress at http://localhost:5133/usage whil
 | `*.Tests` | xUnit tests for each of the above. |
 | `Sev.SmokeTest` | A console app that prints meters and one day of usage from the live API. |
 
-[CLAUDE.md](CLAUDE.md) describes the design and what has been learned about the APIs' behaviour. SEV provides an API reference to its API customers, and an [OpenAPI description](https://github.com/dragan-norliga/sev-rest-clients/blob/master/DotNetExampleClient/api/openapi.yaml) is also available.
+[AGENTS.md](AGENTS.md) describes the design and what has been learned about the APIs' behaviour. SEV provides an API reference to its API customers, and an [OpenAPI description](https://github.com/dragan-norliga/sev-rest-clients/blob/master/DotNetExampleClient/api/openapi.yaml) is also available.
 
 ## License
 
