@@ -1,7 +1,9 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using MyUplink.Client;
 using MyUplink.Client.Models;
@@ -109,6 +111,27 @@ public class HeatPumpToolsTests
         var message = HeatPumpToolErrors.Describe(new MyUplinkApiException(status, "", TimeSpan.FromSeconds(29.5)));
 
         Assert.Contains(expected, message);
+    }
+
+    [Fact]
+    public async Task CallAsync_TranslatesNetworkTimeoutAndJsonErrors()
+    {
+        var netEx = await Assert.ThrowsAsync<McpException>(
+            () => HeatPumpToolErrors.CallAsync<int>(() => throw new HttpRequestException("Connection refused")));
+        Assert.Contains("Could not reach myUplink", netEx.Message);
+
+        var timeoutEx = await Assert.ThrowsAsync<McpException>(
+            () => HeatPumpToolErrors.CallAsync<int>(() => throw new TaskCanceledException("timeout"), CancellationToken.None));
+        Assert.Contains("timed out", timeoutEx.Message);
+
+        var jsonEx = await Assert.ThrowsAsync<McpException>(
+            () => HeatPumpToolErrors.CallAsync<int>(() => throw new JsonException("bad json")));
+        Assert.Contains("unexpected response", jsonEx.Message);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAsync<TaskCanceledException>(
+            () => HeatPumpToolErrors.CallAsync<int>(() => throw new TaskCanceledException(), cts.Token));
     }
 
     // --- Registration: the tool only exists when myUplink is configured ---

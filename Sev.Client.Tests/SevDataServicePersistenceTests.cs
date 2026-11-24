@@ -95,6 +95,7 @@ public partial class SevDataServiceTests : IDisposable
     [Theory]
     [InlineData("not json")]
     [InlineData("""{"version": 99, "days": []}""")]
+    [InlineData("""{"version": 1}""")]
     public async Task Persisted_UnreadableFileIsIgnored(string content)
     {
         Directory.CreateDirectory(_cacheDirectory);
@@ -106,6 +107,20 @@ public partial class SevDataServiceTests : IDisposable
         Assert.Single(_handler.Requests);
         Assert.Equal(24, result.Meters.Single().Readings.Count);
         Assert.Contains(_log, line => line.StartsWith("Ignoring"));
+    }
+
+    [Fact]
+    public async Task Persisted_DayEntryWithNullReadingsIsSkipped()
+    {
+        Directory.CreateDirectory(_cacheDirectory);
+        File.WriteAllText(Path.Combine(_cacheDirectory, "UsageReading.json"),
+            """{"version":1,"days":[{"meter_id":1111,"day":"2026-11-19"}]}""");
+        _handler.Respond(UsageJson((1111, Day(-2), 24)));
+
+        var result = await StartServer().GetHourlyUsageAsync([1111], Start(Day(-2)), Start(Day(-1)));
+
+        Assert.Single(_handler.Requests);
+        Assert.Equal(24, result.Meters.Single().Readings.Count);
     }
 
     [Fact]

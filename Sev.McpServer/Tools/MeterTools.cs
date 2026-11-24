@@ -15,5 +15,6 @@ public class MeterTools(SevDataService sev, MeterNicknames nicknames)
         "The list is cached for a few hours, so calling it again is cheap.")]
     public Task<IReadOnlyList<MeterSummary>> ListMetersAsync(CancellationToken cancellationToken) =>
         SevToolErrors.CallAsync(async () =>
-            SevToolErrors.ThrowIfEmpty(nicknames.Apply(MeterSummary.FromCustomers(await sev.GetAvailableMetersAsync(cancellationToken)))));
+            SevToolErrors.ThrowIfEmpty(nicknames.Apply(MeterSummary.FromCustomers(await sev.GetAvailableMetersAsync(cancellationToken)))),
+            cancellationToken);
 }

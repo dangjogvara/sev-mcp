@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using ModelContextProtocol;
 using Sev.Client;
 using Sev.Client.Models;
@@ -132,5 +133,42 @@ public class SevToolErrorsTests
         Assert.Contains("10 calls per 5 minutes", ex.Message);
         Assert.Contains("90 seconds", ex.Message);
         Assert.Same(limitError, ex.InnerException);
+    }
+
+    [Fact]
+    public async Task CallAsync_TurnsNetworkErrorIntoMcpException()
+    {
+        var networkError = new HttpRequestException("Name or service not known");
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => SevToolErrors.CallAsync<int>(() => throw networkError));
+
+        Assert.Contains("Could not reach the SEV API", ex.Message);
+        Assert.Contains("Name or service not known", ex.Message);
+        Assert.Same(networkError, ex.InnerException);
+    }
+
+    [Fact]
+    public async Task CallAsync_TurnsHttpClientTimeoutIntoMcpException_ButLeavesCallerCancellationAlone()
+    {
+        var timeout = new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.");
+        var mcpEx = await Assert.ThrowsAsync<McpException>(
+            () => SevToolErrors.CallAsync<int>(() => throw timeout, CancellationToken.None));
+        Assert.Contains("timed out", mcpEx.Message);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        await Assert.ThrowsAsync<TaskCanceledException>(
+            () => SevToolErrors.CallAsync<int>(() => throw new TaskCanceledException(), cts.Token));
+    }
+
+    [Fact]
+    public async Task CallAsync_TurnsJsonErrorIntoMcpException()
+    {
+        var jsonError = new JsonException("Unexpected token '<'");
+
+        var ex = await Assert.ThrowsAsync<McpException>(() => SevToolErrors.CallAsync<int>(() => throw jsonError));
+
+        Assert.Contains("unexpected response", ex.Message);
+        Assert.Same(jsonError, ex.InnerException);
     }
 }
