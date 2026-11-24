@@ -56,9 +56,12 @@ public class HeatPumpHistoryTools(HeatPumpLog log, TimeProvider time)
         var selected = SelectParameters(device.Parameters, parameters);
         var loggedFrom = device.Samples.Min(s => s.Hour);
         var start = from > loggedFrom ? from : loggedFrom;
-        // The current hour counts once its sample is taken, so "now" is the end of this hour.
-        var expected = start < to ? Periods.ExpectedHours(start, to, localNow.AddHours(1)) : [];
         var samples = device.Samples.Where(s => s.Hour >= from && s.Hour < to).ToDictionary(s => s.Hour);
+        // The current hour is sampled within 5 minutes of starting; don't report it as missing before its sample
+        // arrives, but do count it once logged.
+        var currentHour = SevTime.StartOfHour(localNow);
+        var expectedUntil = samples.ContainsKey(currentHour) ? currentHour.AddHours(1) : currentHour;
+        var expected = start < to ? Periods.ExpectedHours(start, to, expectedUntil) : [];
 
         var expectedByPeriod = expected.ToLookup(h => Periods.Key(h, granularity));
         var series = selected.Select(parameter => SummarizeSeries(parameter, samples, expectedByPeriod, granularity)).ToList();

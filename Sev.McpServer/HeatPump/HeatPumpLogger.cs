@@ -40,10 +40,10 @@ public class HeatPumpLogger(IServiceScopeFactory scopes, HeatPumpLog log, TimePr
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    private async Task SampleIfDueAsync(CancellationToken cancellationToken)
+    public async Task SampleIfDueAsync(CancellationToken cancellationToken)
     {
         var hour = SevTime.StartOfHour(SevTime.LocalNow(time));
-        if (_devices is { } known && known.All(id => log.HasSample(id, hour)))
+        if (_devices is { Count: > 0 } known && known.All(id => log.HasSample(id, hour)))
         {
             return;
         }
@@ -87,8 +87,12 @@ public class HeatPumpLogger(IServiceScopeFactory scopes, HeatPumpLog log, TimePr
                     continue;
                 }
                 var points = await myUplink.GetPointsAsync(device.Id, cancellationToken);
-                log.Add(device.Id, device.Product?.Name, hour, HeatPumpReadings.ForLog(points));
-                logged++;
+                var readings = HeatPumpReadings.ForLog(points);
+                if (readings.Count > 0)
+                {
+                    log.Add(device.Id, device.Product?.Name, hour, readings);
+                    logged++;
+                }
             }
         }
         return new Sample(logged, offline, devices);
